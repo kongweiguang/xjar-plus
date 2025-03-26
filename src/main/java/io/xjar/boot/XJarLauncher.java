@@ -1,9 +1,10 @@
 package io.xjar.boot;
 
 import io.xjar.XLauncher;
-import org.springframework.boot.loader.JarLauncher;
+import org.springframework.boot.loader.launch.JarLauncher;
 
 import java.net.URL;
+import java.util.Collection;
 
 /**
  * Spring-Boot Jar 启动器
@@ -27,8 +28,8 @@ public class XJarLauncher extends JarLauncher {
     }
 
     @Override
-    protected ClassLoader createClassLoader(URL[] urls) throws Exception {
-        return new XBootClassLoader(urls, this.getClass().getClassLoader(), xLauncher.xDecryptor, xLauncher.xEncryptor, xLauncher.xKey);
+    protected ClassLoader createClassLoader(Collection<URL> urls) throws Exception {
+        return new XBootClassLoader(urls.toArray(new URL[]{}), this.getClass().getClassLoader(), xLauncher.xDecryptor, xLauncher.xEncryptor, xLauncher.xKey);
     }
 
 }

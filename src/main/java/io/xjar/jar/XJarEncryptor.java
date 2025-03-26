@@ -46,7 +46,7 @@ public class XJarEncryptor extends XEntryEncryptor<JarArchiveEntry> implements X
                 FileOutputStream fos = new FileOutputStream(dest)
         ) {
             encrypt(key, fis, fos);
-            XGo.make(dest, key);
+//            XGo.make(dest, key);
         }
     }
 
@@ -65,8 +65,8 @@ public class XJarEncryptor extends XEntryEncryptor<JarArchiveEntry> implements X
             Manifest manifest = null;
             while ((entry = zis.getNextJarEntry()) != null) {
                 if (entry.getName().startsWith(XJAR_SRC_DIR)
-                        || entry.getName().endsWith(XJAR_INF_DIR)
-                        || entry.getName().endsWith(XJAR_INF_DIR + XJAR_INF_IDX)
+                    || entry.getName().endsWith(XJAR_INF_DIR)
+                    || entry.getName().endsWith(XJAR_INF_DIR + XJAR_INF_IDX)
                 ) {
                     continue;
                 }
@@ -144,10 +144,10 @@ public class XJarEncryptor extends XEntryEncryptor<JarArchiveEntry> implements X
             JarArchiveEntry entry;
             while ((entry = zis.getNextJarEntry()) != null) {
                 if (entry.getName().startsWith(XJAR_SRC_DIR)
-                        || entry.getName().endsWith(XJAR_INF_DIR)
-                        || entry.getName().endsWith(XJAR_INF_DIR + XJAR_INF_IDX)
-                        || entry.isDirectory()
-                        || entry.getName().equals(META_INF_MANIFEST)
+                    || entry.getName().endsWith(XJAR_INF_DIR)
+                    || entry.getName().endsWith(XJAR_INF_DIR + XJAR_INF_IDX)
+                    || entry.isDirectory()
+                    || entry.getName().equals(META_INF_MANIFEST)
                 ) {
                     continue;
                 }

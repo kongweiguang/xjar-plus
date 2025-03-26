@@ -4,7 +4,7 @@ import io.xjar.XConstants;
 import io.xjar.XDecryptor;
 import io.xjar.XEncryptor;
 import io.xjar.key.XKey;
-import org.springframework.boot.loader.jar.Handler;
+import org.springframework.boot.loader.net.protocol.jar.Handler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -50,8 +50,8 @@ public class XBootURLHandler extends Handler implements XConstants {
     @Override
     protected URLConnection openConnection(URL url) throws IOException {
         URLConnection urlConnection = super.openConnection(url);
-        return indexes.contains(url.toString())
-                && urlConnection instanceof JarURLConnection
+        return indexes.toString().contains(url.toString())
+               && urlConnection instanceof JarURLConnection
                 ? new XBootURLConnection((JarURLConnection) urlConnection, xDecryptor, xEncryptor, xKey)
                 : urlConnection;
     }

@@ -29,12 +29,15 @@ public class XBootEncryptor extends XEntryEncryptor<JarArchiveEntry> implements 
     private final Map<String, String> map = new HashMap<>();
 
     {
-        final String jarLauncher = "org.springframework.boot.loader.JarLauncher";
+        final String jarLauncher = "org.springframework.boot.loader.launch.JarLauncher";
         final String warLauncher = "org.springframework.boot.loader.WarLauncher";
         final String extLauncher = "org.springframework.boot.loader.PropertiesLauncher";
+        final String extLauncher4V3 = "org.springframework.boot.loader.launch.PropertiesLauncher";
         map.put(jarLauncher, "io.xjar.boot.XJarLauncher");
         map.put(warLauncher, "io.xjar.boot.XWarLauncher");
         map.put(extLauncher, "io.xjar.boot.XExtLauncher");
+        map.put(extLauncher4V3, "io.xjar.boot.XExtLauncher");
+
     }
 
     private final int level;
@@ -63,7 +66,7 @@ public class XBootEncryptor extends XEntryEncryptor<JarArchiveEntry> implements 
                 FileOutputStream fos = new FileOutputStream(dest)
         ) {
             encrypt(key, fis, fos);
-            XGo.make(dest, key);
+//            XGo.make(dest, key);
         }
     }
 

@@ -7,6 +7,11 @@ import io.xjar.key.XKey;
 import org.apache.commons.compress.archivers.jar.JarArchiveEntry;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.regex.Pattern;
 
@@ -23,6 +28,8 @@ public class XEncryption {
     private XKey key;
     private XAnyEntryFilter<JarArchiveEntry> includes = XKit.any();
     private XAllEntryFilter<JarArchiveEntry> excludes = XKit.all();
+    private String jarArgs = "";
+    private String jdkZip = "";
 
     /**
      * 指定原文包路径
@@ -51,7 +58,7 @@ public class XEncryption {
      * @param password 密码
      * @return {@code this}
      */
-    public XEncryption use(String password) {
+    public XEncryption password(String password) {
         try {
             this.key = XKit.key(password);
             return this;
@@ -69,7 +76,7 @@ public class XEncryption {
      * @param password  加密密码
      * @return {@code this}
      */
-    public XEncryption use(String algorithm, int keysize, int ivsize, String password) {
+    public XEncryption password(String algorithm, int keysize, int ivsize, String password) {
         try {
             this.key = XKit.key(algorithm, keysize, ivsize, password);
             return this;
@@ -122,29 +129,22 @@ public class XEncryption {
         return this;
     }
 
-    /**
-     * 指定密文包路径, 并执行加密.
-     *
-     * @param xJar 密文包路径
-     * @throws Exception 加密异常
-     */
-    public void to(String xJar) throws Exception {
-        to(new File(xJar));
-    }
 
     /**
      * 指定密文包文件, 并执行加密.
      *
-     * @param xJar 密文包文件
+     * @param to 密文包文件
      * @throws Exception 加密异常
      */
-    public void to(File xJar) throws Exception {
+    public void to(String to, String appName) throws Exception {
         if (jar == null) {
             throw new IllegalArgumentException("jar to encrypt is null. [please call from(String jar) or from(File jar) before]");
         }
+
         if (key == null) {
             throw new IllegalArgumentException("key to encrypt is null. [please call use(String password) or use(String algorithm, int keysize, int ivsize, String password) before]");
         }
+
         XMixEntryFilter<JarArchiveEntry> filter;
         if (includes.size() == 0 && excludes.size() == 0) {
             filter = null;
@@ -157,6 +157,42 @@ public class XEncryption {
                 filter.mix(excludes);
             }
         }
-        XCryptos.encrypt(jar, xJar, key, filter);
+
+        if (null == appName) {
+            appName = "app.jar";
+        }
+
+        //加密jar包
+        Files.createDirectories(Paths.get(to, "resource"));
+        XCryptos.encrypt(jar, new File(to, "resource" + File.separator + appName), key, filter);
+        //生成启动器
+        XGo.make(to, key, appName, jarArgs);
+        //添加jdk
+        addJdk(jdkZip, to);
+
+        System.out.println("加密完成。。。");
+    }
+
+    private void addJdk(String jdkZip, String to) {
+        if (jdkZip == null || jdkZip.isEmpty()) {
+            return;
+        }
+        try {
+            Path sourcePath = Paths.get(jdkZip);    // 源ZIP文件路径
+            Path targetPath = Paths.get(to, "resource", "jdk.zip"); // 目标路径
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public XEncryption jarArgs(String jarArgs) {
+        this.jarArgs = jarArgs;
+        return this;
+    }
+
+    public XEncryption jdkZip(String jdkZip) {
+        this.jdkZip = jdkZip;
+        return this;
     }
 }

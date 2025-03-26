@@ -96,7 +96,7 @@ XCryptos.encryption()
 
 #### 3. 编译脚本
 ```shell script
-go build xjar.go
+go build main.go
 ```
 * 通过步骤2加密成功后XJar会在输出的JAR包同目录下生成一个名为 xjar.go 的的Go启动器源码文件.
 * 将 xjar.go 在不同的平台进行编译即可得到不同平台的启动器可执行文件, 其中Windows下文件名为 xjar.exe 而Linux下为 xjar.

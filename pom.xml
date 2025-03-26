@@ -5,45 +5,35 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.xjar</groupId>
-    <artifactId>xjar</artifactId>
+    <artifactId>xjar-plus</artifactId>
     <version>4.0.2</version>
 
-    <name>xjar</name>
+    <name>xjar-plus</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.7</maven.compiler.source>
-        <maven.compiler.target>1.7</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
     </properties>
-
-    <repositories>
-        <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
-        </repository>
-    </repositories>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>1.19</version>
+            <version>1.27.1</version>
         </dependency>
-        <dependency>
-            <groupId>com.github.core-lib</groupId>
-            <artifactId>loadkit</artifactId>
-            <version>v1.0.1</version>
-        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-loader</artifactId>
-            <version>2.0.1.RELEASE</version>
+            <version>3.4.2</version>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.12</version>
+            <version>4.13.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -55,8 +45,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.5.1</version>
                 <configuration>
-                    <source>1.7</source>
-                    <target>1.7</target>
+                    <source>21</source>
+                    <target>21</target>
                     <fork>true</fork>
                     <verbose>true</verbose>
                     <encoding>UTF-8</encoding>
@@ -67,6 +57,7 @@
                     </compilerArguments>
                 </configuration>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
@@ -83,6 +74,7 @@
                     </execution>
                 </executions>
             </plugin>
+
         </plugins>
     </build>
 
