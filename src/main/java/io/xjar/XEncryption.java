@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import static io.xjar.XFilters.*;
@@ -30,6 +31,8 @@ public class XEncryption {
     private XAllEntryFilter<JarArchiveEntry> excludes = XKit.all();
     private String jarArgs = "";
     private String jdkZip = "";
+    private String goPath = null;
+    private boolean pkgPlatform = false;
 
     /**
      * 指定原文包路径
@@ -171,6 +174,30 @@ public class XEncryption {
         addJdk(jdkZip, to);
 
         System.out.println("加密完成。。。");
+
+        System.out.println("开始打包。。。");
+
+        buildPKG(to);
+
+        System.out.println("打包完成。。。");
+    }
+
+    private void buildPKG(String to) {
+        if (goPath != null) {
+            try {
+                ProcessBuilder processBuilder = new ProcessBuilder(goPath + File.separator + "go", "build", "main.go");
+                if (pkgPlatform) {
+                    Map<String, String> environment = processBuilder.environment();
+                    environment.put("GOOS", "linux");
+                    environment.put("GOARCH", "amd64");
+                }
+                processBuilder.directory(new File(to));
+                processBuilder.redirectErrorStream(true);
+                Process start = processBuilder.start();
+            } catch (IOException e) {
+                System.out.println("打包可执行文件失败，没有配置go环境");
+            }
+        }
     }
 
     private void addJdk(String jdkZip, String to) {
@@ -195,4 +222,15 @@ public class XEncryption {
         this.jdkZip = jdkZip;
         return this;
     }
+
+    public XEncryption pkgLinux() {
+        this.pkgPlatform = true;
+        return this;
+    }
+
+    public XEncryption goPath(String goPath) {
+        this.goPath = goPath;
+        return this;
+    }
+
 }
