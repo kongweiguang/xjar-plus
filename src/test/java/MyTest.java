@@ -15,12 +15,13 @@ public class MyTest {
                 .jdkZip("D:\\bwy\\java\\env\\graalvm-ce-21.0.2.zip")
                 //需要加密路径
                 .include("/cn/edu/pku/whai/**")
+                .include("/**.yml")
                 //需要排除路径
                 .exclude("/static/**/*")
                 //golang的路径
                 .goPath("D:\\bwy\\java\\xm\\dev\\src\\main\\resources\\go1.24.1\\bin")
                 //是否打包为linux可执行文件
-                .pkgLinux()
+//                .pkgLinux()
                 //打包到目标路径
                 .to("D:\\bwy\\java\\xm\\ai-open-platform-back\\ai-open-platform-start\\target\\boboji", "bala.jar");
     }

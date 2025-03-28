@@ -20,6 +20,7 @@ public class MyTest {
                 .jdkZip("D:\\bwy\\java\\env\\graalvm-ce-21.0.2.zip")
                 //需要加密路径
                 .include("/cn/edu/pku/whai/**")
+                .include("BOOT-INF/classes/application**")
                 //需要排除路径
                 .exclude("/static/**/*")
                 //golang的路径
