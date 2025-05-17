@@ -171,9 +171,11 @@ public class XEncryption {
             appName = "app.jar";
         }
 
+        System.out.println("开始加密。。。");
+
         //加密jar包
         Files.createDirectories(Paths.get(to, "resource"));
-        XCryptos.encrypt(jar, new File(to, "resource" + File.separator + appName), key, filter);
+        XCryptos.encrypt(jar, Paths.get(to, "resource", appName).toFile(), key, filter);
 
         if (Objects.equals("", validStartDate)) {
             this.validStartDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
@@ -182,7 +184,7 @@ public class XEncryption {
         //生成启动器
         XGo.make(to, key, appName, jarArgs, validStartDate, validEndDate);
         //添加jdk
-        addJdk(jdkZip, to);
+        addJdk(to);
 
         System.out.println("加密完成。。。");
 
@@ -190,31 +192,45 @@ public class XEncryption {
 
         buildPKG(to);
 
-        System.out.println("打包完成。。。");
     }
 
     private void buildPKG(String to) {
         if (goPath != null) {
             try {
-                ProcessBuilder processBuilder = new ProcessBuilder(goPath + File.separator + "go", "build", "main.go");
-                if (pkgPlatform) {
-                    Map<String, String> environment = processBuilder.environment();
-                    environment.put("GOOS", "linux");
-                    environment.put("GOARCH", "amd64");
-                }
-                processBuilder.directory(new File(to));
-                processBuilder.redirectErrorStream(true);
-                Process process = processBuilder.start();
+                getProcess(to)
+                        .onExit()
+                        .handle((p, t) -> {
+                            if (t != null) {
+                                System.err.println("打包异常" + t.getMessage());
+                            } else {
+                                System.out.println("打包完成。。。");
+                            }
+
+                            return p.exitValue();
+                        }).join();
             } catch (IOException e) {
-                System.out.println("打包可执行文件失败，没有配置go环境");
+                System.out.println("打包可执行文件失败，调用go环境打包失败");
             }
         }
     }
 
-    private void addJdk(String jdkZip, String to) {
+    private Process getProcess(String to) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(goPath + File.separator + "go", "build", "main.go");
+        if (pkgPlatform) {
+            Map<String, String> environment = pb.environment();
+            environment.put("GOOS", "linux");
+            environment.put("GOARCH", "amd64");
+        }
+        pb.directory(new File(to));
+        pb.redirectErrorStream(true);
+        return pb.start();
+    }
+
+    private void addJdk(String to) {
         if (jdkZip == null || jdkZip.isEmpty()) {
             return;
         }
+
         try {
             Path sourcePath = Paths.get(jdkZip);    // 源ZIP文件路径
             Path targetPath = Paths.get(to, "resource", "jdk.zip"); // 目标路径

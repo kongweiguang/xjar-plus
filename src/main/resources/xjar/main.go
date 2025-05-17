@@ -34,11 +34,11 @@ func main() {
 	jdkPath := filepath.Join(os.TempDir(), "deploy", "jdk")
 
 	if err := preEnv(jdkPath); err != nil {
-		exitWithMsg("1")
+		exitWithMsg("pre")
 	}
 
 	if err := runApp(jdkPath, duration); err != nil {
-		exitWithMsg("2")
+		exitWithMsg("run")
 	}
 
 }
@@ -71,9 +71,8 @@ func preEnv(jdkPath string) error {
 
 func runApp(jdkPath string, duration time.Duration) error {
 	args := "#{jarArgs}" + " -jar app.jar"
-	cmd := exec.Command("java", strings.Fields(args)...)
-	cmd.Dir = filepath.Join(jdkPath, "bin")
-
+	cmd := exec.Command(filepath.Join(jdkPath, "bin", "java"), strings.Fields(args)...)
+    cmd.Dir = filepath.Join(jdkPath, "bin")
 	cmd.Stdin = bytes.NewReader(encodeKey())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -107,11 +106,11 @@ func checkDate() (time.Duration, error) {
 
 	start, err := time.ParseInLocation(dateFormat, validStartDate, loc)
 	if err != nil {
-		return -1, errors.New("date parse error")
+		return -1, fmt.Errorf("date parse error")
 	}
 
 	if now.Before(start) {
-		return -1, errors.New("date expired")
+		return -1, fmt.Errorf("date expired")
 	}
 
 	if validEndDate == "" {
@@ -120,11 +119,11 @@ func checkDate() (time.Duration, error) {
 
 	end, err := time.ParseInLocation(dateFormat, validEndDate, loc)
 	if err != nil {
-		return -1, errors.New("date parse error")
+		return -1, fmt.Errorf("date parse error")
 	}
 
 	if now.After(end) {
-		return -1, errors.New("date expired")
+		return -1, fmt.Errorf("date expired")
 	}
 
 	return end.Sub(now), nil
