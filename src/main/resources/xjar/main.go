@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"embed"
-	"errors"
 	"fmt"
 	"io"
 	"os"
