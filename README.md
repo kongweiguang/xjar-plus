@@ -17,7 +17,7 @@ public class MyTest {
                 //执行jar参数 最后执行结果是 java 自定义参数 -jar app.jar
                 //建议加上-XX:+DisableAttachMechanism 不然可以使用agent获取jvm运行时的class信息进行反编译（通过类似arthas的工具实现）
                 .jarArgs("-XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED")
-                //jdk的zip包地址（需要放到目标机器执行的jdk版本，一般是linux下的jdk）
+                //jdk的zip包地址（需要放到目标机器执行的jdk版本，一般是linux下的jdk），注意：jdk的zip包不能有多层目录，只能是jdk的根目录
                 .jdkZip("C:\\Users\\24052\\.jdks\\liberica-21.0.7.zip")
                 //需要加密路径
                 .include("org/example/boot3dev/**")
