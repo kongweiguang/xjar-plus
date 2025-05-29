@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static io.xjar.XFilters.*;
@@ -30,14 +31,15 @@ import static io.xjar.XFilters.*;
 public class XEncryption {
     private File jar;
     private XKey key;
-    private XAnyEntryFilter<JarArchiveEntry> includes = XKit.any();
-    private XAllEntryFilter<JarArchiveEntry> excludes = XKit.all();
+    private final XAnyEntryFilter<JarArchiveEntry> includes = XKit.any();
+    private final XAllEntryFilter<JarArchiveEntry> excludes = XKit.all();
     private String jarArgs = "";
     private String jdkZip = "";
     private String goPath = null;
     private boolean pkgPlatform = false;
     private String validStartDate = "";
     private String validEndDate = "";
+    private String code = UUID.randomUUID().toString();
 
     /**
      * 指定原文包路径
@@ -182,7 +184,7 @@ public class XEncryption {
         }
 
         //生成启动器
-        XGo.make(to, key, appName, jarArgs, validStartDate, validEndDate);
+        XGo.make(to, key, appName, jarArgs, validStartDate, validEndDate, code);
         //添加jdk
         addJdk(to);
 
@@ -191,7 +193,6 @@ public class XEncryption {
         System.out.println("开始打包。。。");
 
         buildPKG(to);
-
     }
 
     private void buildPKG(String to) {
@@ -267,6 +268,11 @@ public class XEncryption {
 
     public XEncryption validEndDate(String date) {
         this.validEndDate = date;
+        return this;
+    }
+
+    public XEncryption code(String code) {
+        this.code = code;
         return this;
     }
 }

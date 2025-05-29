@@ -3,7 +3,11 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"embed"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +23,9 @@ const (
 	dateFormat     = "2006-01-02 15:04:05"
 	validStartDate = "#{validStartDate}"
 	validEndDate   = "#{validEndDate}"
+	hexKey         = "#{hexKey}"
+	hexIV          = "#{hexIV}"
+	code           = "#{code}"
 )
 
 //go:embed resource/*
@@ -71,7 +78,7 @@ func preEnv(jdkPath string) error {
 func runApp(jdkPath string, duration time.Duration) error {
 	args := "#{jarArgs}" + " -jar app.jar"
 	cmd := exec.Command(filepath.Join(jdkPath, "bin", "java"), strings.Fields(args)...)
-    cmd.Dir = filepath.Join(jdkPath, "bin")
+	cmd.Dir = filepath.Join(jdkPath, "bin")
 	cmd.Stdin = bytes.NewReader(encodeKey())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -100,10 +107,42 @@ func encodeKey() []byte {
 }
 
 func checkDate() (time.Duration, error) {
+	exePath, _ := os.Executable()
+	cipherData, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "key.x"))
+	vsd := ""
+	ved := ""
+
+	if err != nil {
+		fmt.Println("failed to read key.x -> use app key info ")
+		vsd = validStartDate
+		ved = validEndDate
+	} else {
+		key, _ := hex.DecodeString(hexKey)
+		iv, _ := hex.DecodeString(hexIV)
+		plain, err := decryptAesCbc(cipherData, key, iv)
+
+		if err != nil {
+			fmt.Println("license error")
+		}
+
+		var lcs License
+		err = json.Unmarshal(plain, &lcs)
+		if err != nil {
+			return -1, fmt.Errorf("license error")
+		}
+
+		if code != lcs.Code {
+			return -1, fmt.Errorf("license error")
+		}
+
+		vsd = lcs.ValidStartDate
+		ved = lcs.ValidEndDate
+	}
+
 	now := time.Now()
 	loc := time.Local
 
-	start, err := time.ParseInLocation(dateFormat, validStartDate, loc)
+	start, err := time.ParseInLocation(dateFormat, vsd, loc)
 	if err != nil {
 		return -1, fmt.Errorf("date parse error")
 	}
@@ -112,11 +151,11 @@ func checkDate() (time.Duration, error) {
 		return -1, fmt.Errorf("date expired")
 	}
 
-	if validEndDate == "" {
+	if ved == "" {
 		return -1, nil
 	}
 
-	end, err := time.ParseInLocation(dateFormat, validEndDate, loc)
+	end, err := time.ParseInLocation(dateFormat, ved, loc)
 	if err != nil {
 		return -1, fmt.Errorf("date parse error")
 	}
@@ -126,6 +165,42 @@ func checkDate() (time.Duration, error) {
 	}
 
 	return end.Sub(now), nil
+}
+
+func unPKCS5Padding(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("input is empty")
+	}
+
+	padLen := int(data[len(data)-1])
+	if padLen <= 0 || padLen > len(data) {
+		return nil, fmt.Errorf("invalid padding size")
+	}
+
+	for _, v := range data[len(data)-padLen:] {
+		if int(v) != padLen {
+			return nil, fmt.Errorf("invalid padding bytes")
+		}
+	}
+
+	return data[:len(data)-padLen], nil
+}
+
+func decryptAesCbc(cipherData, key, iv []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher")
+	}
+
+	if len(cipherData)%block.BlockSize() != 0 {
+		return nil, fmt.Errorf("ciphertext length is not a multiple of block size")
+	}
+
+	mode := cipher.NewCBCDecrypter(block, iv)
+	plain := make([]byte, len(cipherData))
+	mode.CryptBlocks(plain, cipherData)
+
+	return unPKCS5Padding(plain)
 }
 
 func unzip4Bytes(data []byte, dest string) error {
@@ -202,6 +277,12 @@ type XKey struct {
 	keysize   []byte
 	ivsize    []byte
 	password  []byte
+}
+
+type License struct {
+	Code           string `json:"code"`
+	ValidStartDate string `json:"validStartDate"`
+	ValidEndDate   string `json:"validEndDate"`
 }
 
 var xKey = XKey{

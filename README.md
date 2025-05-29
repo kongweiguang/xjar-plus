@@ -31,6 +31,8 @@ public class MyTest {
                 //（格式必须是yyyy-MM-dd HH:mm:ss）启动器有效期时间，简单判断时间，如果宿主机修改机器时间就没办法了，推荐网络校验
                 .validStartDate("2025-01-01 00:00:00")
                 .validEndDate("2025-10-01 00:00:00")
+                //生成license文件内的code，如果有license文件，会校验license中的code和启动器重的code一致，否则会认为这个license文件不是这个启动器的，不填默认生成uuid
+//                .code("123123123123123123")
                 //打包到boboji目标路径
                 .to("C:\\dev\\java\\xm\\boot3-dev\\target\\boboji", "bala.jar");
     }
