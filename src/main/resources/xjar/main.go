@@ -37,7 +37,7 @@ func main() {
 		exitWithMsg("license expired")
 	}
 
-	jdkPath := filepath.Join(os.TempDir(), "deploy", "jdk")
+	jdkPath := filepath.Join(os.TempDir(), "deploy", hex.EncodeToString([]byte(code))[:10], "jdk")
 
 	if err := preEnv(jdkPath); err != nil {
 		exitWithMsg("pre")
