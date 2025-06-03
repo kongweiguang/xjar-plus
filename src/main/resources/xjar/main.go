@@ -32,9 +32,15 @@ const (
 var resource embed.FS
 
 func main() {
-	duration, err := checkDate()
+	license, err := readLicense()
+
 	if err != nil {
-		exitWithMsg("license expired")
+		fmt.Println(err.Error())
+	}
+
+	duration, extArgs, err := checkDate(license)
+	if err != nil {
+		exitWithMsg(err.Error())
 	}
 
 	jdkPath := filepath.Join(os.TempDir(), "deploy", hex.EncodeToString([]byte(code))[:10], "jdk")
@@ -43,10 +49,40 @@ func main() {
 		exitWithMsg("pre")
 	}
 
-	if err := runApp(jdkPath, duration); err != nil {
+	if err := runApp(jdkPath, extArgs, duration); err != nil {
 		exitWithMsg("run")
 	}
 
+}
+
+func readLicense() (*License, error) {
+	exePath, _ := os.Executable()
+	cipherData, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "key.x"))
+
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
+
+	key, _ := hex.DecodeString(hexKey)
+	iv, _ := hex.DecodeString(hexIV)
+	plain, err := decryptAesCbc(cipherData, key, iv)
+
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
+
+	var lcs License
+	err = json.Unmarshal(plain, &lcs)
+
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
+
+	if code != lcs.Code {
+		return nil, fmt.Errorf("license error")
+	}
+
+	return &lcs, nil
 }
 
 func preEnv(jdkPath string) error {
@@ -75,8 +111,8 @@ func preEnv(jdkPath string) error {
 	return nil
 }
 
-func runApp(jdkPath string, duration time.Duration) error {
-	args := "#{jarArgs}" + " -jar app.jar"
+func runApp(jdkPath, extArgs string, duration time.Duration) error {
+	args := " #{jarArgs} " + extArgs + " -jar app.jar"
 	cmd := exec.Command(filepath.Join(jdkPath, "bin", "java"), strings.Fields(args)...)
 	cmd.Dir = filepath.Join(jdkPath, "bin")
 	cmd.Stdin = bytes.NewReader(encodeKey())
@@ -106,37 +142,20 @@ func encodeKey() []byte {
 	}, []byte{})
 }
 
-func checkDate() (time.Duration, error) {
-	exePath, _ := os.Executable()
-	cipherData, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "key.x"))
+func checkDate(lcs *License) (time.Duration, string, error) {
 	vsd := ""
 	ved := ""
+	args := ""
 
-	if err != nil {
+	if lcs == nil {
 		fmt.Println("failed to read key.x -> use app key info ")
 		vsd = validStartDate
 		ved = validEndDate
 	} else {
-		key, _ := hex.DecodeString(hexKey)
-		iv, _ := hex.DecodeString(hexIV)
-		plain, err := decryptAesCbc(cipherData, key, iv)
-
-		if err != nil {
-			fmt.Println("license error")
-		}
-
-		var lcs License
-		err = json.Unmarshal(plain, &lcs)
-		if err != nil {
-			return -1, fmt.Errorf("license error")
-		}
-
-		if code != lcs.Code {
-			return -1, fmt.Errorf("license error")
-		}
-
+		fmt.Println("success to read key.x -> use license key info ")
 		vsd = lcs.ValidStartDate
 		ved = lcs.ValidEndDate
+		args = lcs.Args
 	}
 
 	now := time.Now()
@@ -144,27 +163,27 @@ func checkDate() (time.Duration, error) {
 
 	start, err := time.ParseInLocation(dateFormat, vsd, loc)
 	if err != nil {
-		return -1, fmt.Errorf("date parse error")
+		return -1, args, fmt.Errorf("date parse error")
 	}
 
 	if now.Before(start) {
-		return -1, fmt.Errorf("date expired")
+		return -1, args, fmt.Errorf("date expired")
 	}
 
 	if ved == "" {
-		return -1, nil
+		return -1, args, nil
 	}
 
 	end, err := time.ParseInLocation(dateFormat, ved, loc)
 	if err != nil {
-		return -1, fmt.Errorf("date parse error")
+		return -1, args, fmt.Errorf("date parse error")
 	}
 
 	if now.After(end) {
-		return -1, fmt.Errorf("date expired")
+		return -1, args, fmt.Errorf("date expired")
 	}
 
-	return end.Sub(now), nil
+	return end.Sub(now), args, nil
 }
 
 func unPKCS5Padding(data []byte) ([]byte, error) {
@@ -283,6 +302,7 @@ type License struct {
 	Code           string `json:"code"`
 	ValidStartDate string `json:"validStartDate"`
 	ValidEndDate   string `json:"validEndDate"`
+	Args           string `json:"args"`
 }
 
 var xKey = XKey{

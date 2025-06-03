@@ -33,7 +33,7 @@ public class XGo {
                             String validStartDate, String validEndDate, String code) throws IOException {
 
         // 生成加密 license 文件
-        license(to, xKey, code, validStartDate, validEndDate);
+        license(to, xKey, "", code, validStartDate, validEndDate);
 
         // 构造变量 Map
         Map<String, String> variables = new HashMap<>();
@@ -75,14 +75,26 @@ public class XGo {
                 .collect(Collectors.joining(", "));
     }
 
-    public static void license(String to, XKey xKey, String code, String validStartDate, String validEndDate) throws IOException {
+    /**
+     * 生成加密 license 文件
+     *
+     * @param to             目标路径
+     * @param xKey           加密密钥
+     * @param args           额外启动器参数
+     * @param code           启动器 code
+     * @param validStartDate 启动器有效期开始时间
+     * @param validEndDate   启动器有效期结束时间
+     * @throws IOException 加密写入 license 文件失败
+     */
+    public static void license(String to, XKey xKey, String args, String code, String validStartDate, String validEndDate) throws IOException {
         String json = """
                 {
                     "code": "%s",
                     "validStartDate": "%s",
-                    "validEndDate": "%s"
+                    "validEndDate": "%s",
+                    "args": "%s"
                 }
-                """.formatted(code, validStartDate, validEndDate);
+                """.formatted(code, validStartDate, validEndDate, args);
 
         File outputFile = Paths.get(to, LICENSE_FILE).toFile();
 
