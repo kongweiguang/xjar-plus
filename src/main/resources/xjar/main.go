@@ -99,6 +99,10 @@ func preEnv(jdkPath string) error {
 		return err
 	}
 
+	if err := chmodJdkCommands(jdkPath); err != nil {
+		return err
+	}
+
 	appJar, err := resource.ReadFile(jarPath)
 	if err != nil {
 		return err
@@ -109,6 +113,26 @@ func preEnv(jdkPath string) error {
 	}
 
 	return nil
+}
+
+func chmodJdkCommands(jdkPath string) error {
+	binPath := filepath.Join(jdkPath, "bin")
+
+	return filepath.Walk(binPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if err := os.Chmod(path, 0755); err != nil {
+			return fmt.Errorf("chmod jdk command: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func runApp(jdkPath, extArgs string, duration time.Duration) error {
