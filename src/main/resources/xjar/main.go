@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"embed"
@@ -43,7 +44,7 @@ func main() {
 		exitWithMsg(err.Error())
 	}
 
-	jdkPath := filepath.Join(os.TempDir(), "deploy", hex.EncodeToString([]byte(code))[:10], "jdk")
+	jdkPath := filepath.Join(os.TempDir(), "deploy", tempDirName(code), "jdk")
 
 	if err := preEnv(jdkPath); err != nil {
 		exitWithMsg("pre")
@@ -56,15 +57,24 @@ func main() {
 }
 
 func readLicense() (*License, error) {
-	exePath, _ := os.Executable()
+	exePath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
 	cipherData, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "key.x"))
 
 	if err != nil {
 		return nil, fmt.Errorf("license error")
 	}
 
-	key, _ := hex.DecodeString(hexKey)
-	iv, _ := hex.DecodeString(hexIV)
+	key, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
+	iv, err := hex.DecodeString(hexIV)
+	if err != nil {
+		return nil, fmt.Errorf("license error")
+	}
 	plain, err := decryptAesCbc(cipherData, key, iv)
 
 	if err != nil {
@@ -115,6 +125,14 @@ func preEnv(jdkPath string) error {
 	return nil
 }
 
+func tempDirName(value string) string {
+	name := hex.EncodeToString([]byte(value))
+	if len(name) > 10 {
+		return name[:10]
+	}
+	return name
+}
+
 func chmodJdkCommands(jdkPath string) error {
 	binPath := filepath.Join(jdkPath, "bin")
 
@@ -136,25 +154,84 @@ func chmodJdkCommands(jdkPath string) error {
 }
 
 func runApp(jdkPath, extArgs string, duration time.Duration) error {
-	args := " #{jarArgs} " + extArgs + " -jar app.jar"
-	cmd := exec.Command(filepath.Join(jdkPath, "bin", "java"), strings.Fields(args)...)
+	args, err := parseArgs(strings.Join([]string{"#{jarArgs}", extArgs}, " "))
+	if err != nil {
+		return err
+	}
+	args = append(args, "-jar", "app.jar")
+
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if duration > 0 {
+		ctx, cancel = context.WithTimeout(ctx, duration)
+		defer cancel()
+	}
+
+	cmd := exec.CommandContext(ctx, filepath.Join(jdkPath, "bin", "java"), args...)
 	cmd.Dir = filepath.Join(jdkPath, "bin")
 	cmd.Stdin = bytes.NewReader(encodeKey())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if duration > 0 {
-		time.AfterFunc(duration, func() {
-			fmt.Println("stop process")
-			err := cmd.Process.Kill()
-			if err != nil {
-				fmt.Println("kill process error")
+	err = cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		fmt.Println("stop process")
+		return ctx.Err()
+	}
+	return err
+}
+
+func parseArgs(input string) ([]string, error) {
+	var args []string
+	var current strings.Builder
+	var quote rune
+	pendingBackslash := false
+	tokenStarted := false
+
+	for _, r := range input {
+		switch {
+		case pendingBackslash:
+			if r != quote && r != '\\' {
+				current.WriteRune('\\')
 			}
-			os.Exit(666)
-		})
+			current.WriteRune(r)
+			pendingBackslash = false
+		case quote != 0 && r == '\\':
+			pendingBackslash = true
+			tokenStarted = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				current.WriteRune(r)
+			}
+			tokenStarted = true
+		case r == '\'' || r == '"':
+			quote = r
+			tokenStarted = true
+		case r == ' ' || r == '\t' || r == '\r' || r == '\n':
+			if tokenStarted {
+				args = append(args, current.String())
+				current.Reset()
+				tokenStarted = false
+			}
+		default:
+			current.WriteRune(r)
+			tokenStarted = true
+		}
 	}
 
-	return cmd.Run()
+	if pendingBackslash {
+		current.WriteRune('\\')
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("invalid args: unclosed quote")
+	}
+	if tokenStarted {
+		args = append(args, current.String())
+	}
+
+	return args, nil
 }
 
 func encodeKey() []byte {
@@ -235,6 +312,10 @@ func decryptAesCbc(cipherData, key, iv []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create cipher")
 	}
 
+	if len(iv) != block.BlockSize() {
+		return nil, fmt.Errorf("invalid iv size")
+	}
+
 	if len(cipherData)%block.BlockSize() != 0 {
 		return nil, fmt.Errorf("ciphertext length is not a multiple of block size")
 	}
@@ -253,12 +334,25 @@ func unzip4Bytes(data []byte, dest string) error {
 		return fmt.Errorf("create zip reader: %w", err)
 	}
 
+	cleanDest, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+
 	for _, f := range zr.File {
-		if strings.Contains(f.Name, "..") {
+		if filepath.IsAbs(f.Name) {
 			return fmt.Errorf("invalid file path: %s", f.Name)
 		}
 
 		target := filepath.Join(dest, f.Name)
+		cleanTarget, err := filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		if cleanTarget != cleanDest && !strings.HasPrefix(cleanTarget, cleanDest+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid file path: %s", f.Name)
+		}
+
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, os.ModePerm); err != nil {
 				return fmt.Errorf("mkdir: %w", err)
@@ -277,21 +371,18 @@ func unzip4Bytes(data []byte, dest string) error {
 
 		dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
-			err := src.Close()
-			if err != nil {
-				return err
+			if closeErr := src.Close(); closeErr != nil {
+				return closeErr
 			}
 			return fmt.Errorf("create file: %w", err)
 		}
 
 		if _, err := io.Copy(dst, src); err != nil {
-			err := src.Close()
-			if err != nil {
-				return err
+			if closeErr := src.Close(); closeErr != nil {
+				return closeErr
 			}
-			err = dst.Close()
-			if err != nil {
-				return err
+			if closeErr := dst.Close(); closeErr != nil {
+				return closeErr
 			}
 			return fmt.Errorf("copy file: %w", err)
 		}
