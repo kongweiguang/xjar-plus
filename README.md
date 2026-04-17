@@ -69,8 +69,7 @@ public class MyTest {
                 // 加密密码，后续生成 license 时也要使用同一个密码
                 .password("woshimimao")
                 // 启动 Jar 时追加到 java 命令后的参数
-                .jarArgs("""
-                        -XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED""")
+                .jarArgs("-XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED")
                 // 随启动器分发的 JDK zip，建议使用目标机器系统对应的 JDK
                 .jdkZip("C:\\Users\\24052\\.jdks\\liberica-21.0.7.zip")
                 // 需要加密的路径，支持 Ant 风格匹配
@@ -135,6 +134,8 @@ boboji
 
 实际可执行文件名称由 Go 在当前平台和目标平台下的默认输出决定。打包 Linux 时通常是 `main`，Windows 时通常是 `main.exe`。
 
+> 部署到目标机器时，只需要把生成的可执行二进制文件（例如 `main` 或 `main.exe`）和 `key.x` 放到目标机器同一目录下即可运行；目标机器不需要 Go 环境，也不需要 `main.go` 源码。
+
 ## 常用配置解释
 
 ### inputJar
@@ -167,12 +168,8 @@ zip。
 
 ```java
 .include("org/example/**")
-.
-
-include("/**.yml")
-.
-
-exclude("/static/**/*")
+.include("/**.yml").
+.exclude("/static/**/*")
 ```
 
 上面的配置表示加密 `org/example` 下的内容和所有 yml 文件，但排除 `static` 静态资源。初次使用时建议先只加密自己的业务包，确认可以启动后再逐步扩大范围。
@@ -231,15 +228,13 @@ license。
 
 ```java
 XKey key = XKit.key("woshimimao");
-XGo.
-
-license(
+XGo.license(
         "C:\\dev\\java\\xm\\boot3-dev\\target\\boboji\\miyao",
         key,
         "123123",
-                "-Xms512m -Xmx1024m -Dserver.port=8083",
-                "2025-01-01 00:00:00",
-                "2026-10-01 00:00:00"
+        "-Xms512m -Xmx1024m -Dserver.port=8083",
+        "2025-01-01 00:00:00",
+        "2026-10-01 00:00:00"
 );
 ```
 
