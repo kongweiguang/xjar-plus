@@ -3,12 +3,15 @@
 xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，当前项目主要适配 Spring Boot 3.4.2 + JDK 21。它可以把原始 Jar
 中指定路径的 class 或资源加密，并生成一个 Go 编译的启动器。目标机器运行时不需要安装 Go，只需要运行打包后的启动器。
 
+项目同时提供本地 Web UI，适合不想直接改 Java 测试代码的新手用户通过表单完成加密打包和 license 生成。
+
 ## 适合解决什么问题
 
 - 不希望直接分发可反编译的明文 Jar。
 - 希望只加密业务包、配置文件等指定资源，而不是把整个 Jar 都处理掉。
 - 希望随启动器一起携带指定版本的 JDK。
 - 希望限制启动器有效期，并可通过 license 文件调整启动参数和有效期。
+- 希望通过可视化界面填写 Jar、JDK、Go、平台、有效期、输出目录等参数，降低首次使用成本。
 
 ## 环境准备
 
@@ -107,6 +110,36 @@ public class MyTest {
     }
 }
 ```
+
+## 可视化 UI 使用方式
+
+如果不想直接修改 `MyTest.java`，可以使用项目自带的本地 Web UI。
+
+![xjar-plus UI](ui_img.png)
+
+### 启动 UI
+
+最简单的方式是在 IDE 中直接运行 [XJarPlusUi.java](src/test/java/ui/XJarPlusUi.java)，启动后访问页面即可。
+
+启动后浏览器访问：
+
+```text
+http://127.0.0.1:9876/
+```
+
+如果 9876 端口被占用，可以指定端口：
+
+```powershell
+java -cp "target/test-classes;target/classes;$deps" ui.XJarPlusUi --port=19876
+```
+
+对应访问：
+
+```text
+http://127.0.0.1:19876/
+```
+
+注意：浏览器出于安全限制，纯 HTML 文件选择框无法读取真实本机绝对路径。所以用的swing文件选择框；如果选择窗口不可用，也可以直接把路径粘贴到文本框。
 
 ## 运行流程说明
 

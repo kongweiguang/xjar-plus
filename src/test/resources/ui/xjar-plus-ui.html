@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>xjar-plus</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #172033;
+            --muted: #667085;
+            --line: #d6dce8;
+            --soft-line: #e8edf5;
+            --panel: #ffffff;
+            --page: #f5f7fb;
+            --field: #fbfcff;
+            --action: #2563eb;
+            --action-strong: #1d4ed8;
+            --accent: #0f9f8e;
+            --warn: #c2410c;
+            --danger: #c52727;
+            --ok: #087443;
+            --shadow: 0 18px 42px rgba(23, 32, 51, .11);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-width: 320px;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 0 0, rgba(37, 99, 235, .13), transparent 31rem),
+                linear-gradient(140deg, #f7fbff 0, #f4f7fb 46%, #eef8f5 100%);
+            font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+        }
+
+        .shell {
+            width: min(1560px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+
+        header {
+            padding: 28px 0 18px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 48px;
+            flex-wrap: wrap;
+        }
+
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            background: #16213a;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.15;
+            letter-spacing: 0;
+        }
+
+        .subtitle {
+            margin: 6px 0 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .github-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+            margin-left: auto;
+            border: 1px solid #c8d2e4;
+            border-radius: 6px;
+            padding: 0 12px;
+            color: #172033;
+            background: rgba(255, 255, 255, .76);
+            font-size: 14px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .github-link:hover {
+            border-color: var(--action);
+            color: var(--action);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px;
+            margin: 8px 0 18px;
+            width: fit-content;
+            border: 1px solid var(--soft-line);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .78);
+            box-shadow: 0 8px 24px rgba(23, 32, 51, .06);
+        }
+
+        .tab {
+            min-height: 38px;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 16px;
+            color: var(--muted);
+            background: transparent;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .tab[aria-selected="true"] {
+            color: #fff;
+            background: #172033;
+            box-shadow: 0 8px 20px rgba(23, 32, 51, .18);
+        }
+
+        .panel {
+            display: none;
+            margin-bottom: 40px;
+            border: 1px solid var(--soft-line);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .92);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .panel.active { display: block; }
+
+        .panel-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 16px;
+            align-items: center;
+            padding: 20px 22px;
+            border-bottom: 1px solid var(--soft-line);
+            background: linear-gradient(90deg, rgba(37, 99, 235, .08), rgba(15, 159, 142, .08));
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 0;
+        }
+
+        .panel-note {
+            margin: 6px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            padding: 0 10px;
+            border-radius: 6px;
+            color: #075e54;
+            background: #dff8f3;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1180px) 360px;
+            gap: 18px;
+            align-items: start;
+        }
+
+        .main-panels {
+            min-width: 0;
+        }
+
+        .assistant {
+            display: grid;
+            gap: 14px;
+            padding: 22px;
+            position: sticky;
+            top: 18px;
+            max-height: calc(100vh - 36px);
+            overflow: auto;
+            border: 1px solid var(--soft-line);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(248, 251, 255, .86), rgba(240, 250, 247, .72));
+            box-shadow: var(--shadow);
+        }
+
+        .assistant h3 {
+            margin: 0;
+            font-size: 18px;
+            letter-spacing: 0;
+        }
+
+        .assistant p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+            font-size: 13px;
+        }
+
+        .assistant-code {
+            width: 100%;
+            min-height: 104px;
+            border: 1px solid #cdd7ea;
+            border-radius: 6px;
+            padding: 10px;
+            color: #172033;
+            background: #fff;
+            font: 12px/1.55 Consolas, "Cascadia Mono", monospace;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .assistant-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .assistant-button {
+            min-height: 38px;
+            border: 1px solid #b8c2d6;
+            border-radius: 6px;
+            padding: 0 10px;
+            color: #172033;
+            background: #fff;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .assistant-button.primary {
+            border-color: var(--action);
+            color: #fff;
+            background: var(--action);
+        }
+
+        .assistant-button:hover {
+            border-color: var(--action);
+            color: var(--action);
+        }
+
+        .assistant-button.primary:hover {
+            color: #fff;
+            background: var(--action-strong);
+        }
+
+        .param-list {
+            display: grid;
+            gap: 11px;
+            margin: 0;
+        }
+
+        .param-item {
+            display: grid;
+            gap: 5px;
+            padding-bottom: 11px;
+            border-bottom: 1px solid rgba(203, 213, 225, .78);
+        }
+
+        .param-item:last-child {
+            padding-bottom: 0;
+            border-bottom: 0;
+        }
+
+        .param-item code {
+            color: #0f5132;
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px 20px;
+            padding: 22px;
+        }
+
+        .field {
+            display: grid;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .field.full { grid-column: 1 / -1; }
+
+        label {
+            color: #202b3f;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+
+        .control-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: var(--ink);
+            background: var(--field);
+            font: inherit;
+            letter-spacing: 0;
+            outline: none;
+            transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+        }
+
+        textarea {
+            min-height: 128px;
+            resize: vertical;
+            line-height: 1.7;
+        }
+
+        .pattern-box {
+            min-height: 168px;
+            background-image: linear-gradient(to bottom, transparent 31px, rgba(37, 99, 235, .08) 32px);
+            background-size: 100% 32px;
+            line-height: 32px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: var(--action);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+        }
+
+        .field.invalid input,
+        .field.invalid textarea {
+            border-color: var(--danger);
+            box-shadow: 0 0 0 3px rgba(197, 39, 39, .12);
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .error {
+            min-height: 17px;
+            color: var(--danger);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .choose {
+            min-width: 44px;
+            border: 1px solid #b8c2d6;
+            border-radius: 6px;
+            padding: 0 12px;
+            color: #172033;
+            background: #fff;
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .choose:hover {
+            border-color: var(--action);
+            color: var(--action);
+        }
+
+        .actions {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: auto minmax(220px, 1fr);
+            gap: 14px;
+            align-items: center;
+            padding-top: 4px;
+        }
+
+        .submit {
+            min-height: 44px;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 22px;
+            color: #fff;
+            background: var(--action);
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(37, 99, 235, .2);
+        }
+
+        .submit:hover { background: var(--action-strong); }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: .58;
+            box-shadow: none;
+        }
+
+        .status-wrap {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .status {
+            min-height: 42px;
+            display: flex;
+            align-items: center;
+            border: 1px solid var(--soft-line);
+            border-radius: 6px;
+            padding: 10px 12px;
+            color: var(--muted);
+            background: #f9fbff;
+            overflow-wrap: anywhere;
+        }
+
+        .status.ok {
+            border-color: rgba(8, 116, 67, .28);
+            color: var(--ok);
+            background: #ecfdf4;
+        }
+
+        .status.error {
+            border-color: rgba(197, 39, 39, .28);
+            color: var(--danger);
+            background: #fff1f1;
+        }
+
+        .progress {
+            position: relative;
+            height: 6px;
+            border-radius: 999px;
+            background: #e5ebf5;
+            overflow: hidden;
+            visibility: hidden;
+        }
+
+        .progress.active { visibility: visible; }
+
+        .progress::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 38%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--action), var(--accent));
+            animation: loading 1.15s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% { transform: translateX(-110%); }
+            100% { transform: translateX(270%); }
+        }
+
+        @media (max-width: 780px) {
+            .shell { width: min(100% - 28px, 1180px); }
+            .github-link {
+                width: 100%;
+                justify-content: center;
+                margin-left: 0;
+            }
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+            .assistant {
+                position: static;
+                max-height: none;
+                border-top: 1px solid var(--soft-line);
+            }
+            .panel-head,
+            form,
+            .actions {
+                grid-template-columns: 1fr;
+            }
+            .badge { width: fit-content; }
+            .toolbar { width: 100%; }
+            .tab { flex: 1; }
+            .control-row { grid-template-columns: minmax(0, 1fr) 44px; }
+            .choose { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <header>
+        <div class="brand">
+            <div class="brand-mark">X</div>
+            <div>
+                <h1>xjar-plus</h1>
+                <p class="subtitle">本地 Jar 加密与 license 生成。</p>
+            </div>
+            <a class="github-link" href="https://github.com/kongweiguang/xjar-plus" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+    </header>
+
+    <nav class="toolbar" aria-label="功能切换">
+        <button class="tab" type="button" data-tab="encrypt" aria-selected="true">加密打包</button>
+        <button class="tab" type="button" data-tab="license" aria-selected="false">生成 license</button>
+    </nav>
+
+    <div class="workspace">
+    <div class="main-panels">
+    <section id="encrypt" class="panel active">
+        <div class="panel-head">
+            <div>
+                <h2>加密打包</h2>
+                <p class="panel-note">填写 Jar、JDK、Go、平台和加密规则后提交任务。</p>
+            </div>
+            <span class="badge">需要完整路径</span>
+        </div>
+        <form data-api="/api/encrypt" data-kind="encrypt" novalidate>
+            <div class="field full" data-field="inputJar">
+                <label for="inputJar">原始 Jar 路径</label>
+                <div class="control-row">
+                    <input id="inputJar" name="inputJar" type="text" placeholder="请选择或填写 .jar 文件的完整路径">
+                    <button class="choose" type="button" data-choose="file" data-target="inputJar" title="选择 Jar 文件">...</button>
+                </div>
+                <div class="hint">示例：C:\project\app\target\demo.jar</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="password">
+                <label for="encryptPassword">密码</label>
+                <input id="encryptPassword" name="password" type="password" autocomplete="new-password" placeholder="请输入加密密码">
+                <div class="hint">用于生成加密密钥，不能为空。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="platform">
+                <label for="platform">目标平台</label>
+                <input id="platform" name="platform" type="search" list="platformOptions" placeholder="输入 windows、amd64、linux 等关键词搜索">
+                <datalist id="platformOptions">
+                    {{PLATFORM_OPTIONS}}
+                </datalist>
+                <div class="hint">必须从候选项中选择，例如 WINDOWS_AMD64。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field full" data-field="jarArgs">
+                <label for="encryptJarArgs">启动参数</label>
+                <textarea id="encryptJarArgs" name="jarArgs" placeholder="可选，例如：-Xms512m -Xmx1024m --add-opens ..."></textarea>
+                <div class="hint">可留空；多个参数按实际启动参数格式填写。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="jdkZip">
+                <label for="jdkZip">JDK zip 路径</label>
+                <div class="control-row">
+                    <input id="jdkZip" name="jdkZip" type="text" placeholder="请选择或填写 JDK .zip 文件路径">
+                    <button class="choose" type="button" data-choose="file" data-target="jdkZip" title="选择 JDK zip">...</button>
+                </div>
+                <div class="hint">示例：C:\jdk\liberica-21.zip</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="goPath">
+                <label for="goPath">Go bin 路径</label>
+                <div class="control-row">
+                    <input id="goPath" name="goPath" type="text" placeholder="请选择或填写 Go bin 文件夹路径">
+                    <button class="choose" type="button" data-choose="dir" data-target="goPath" title="选择 Go bin 文件夹">...</button>
+                </div>
+                <div class="hint">示例：C:\go\bin</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="validStartDate">
+                <label for="encryptStart">有效期开始</label>
+                <input id="encryptStart" name="validStartDate" type="datetime-local" step="1" placeholder="请选择开始时间">
+                <div class="hint">请选择日期和具体时间。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="validEndDate">
+                <label for="encryptEnd">有效期结束</label>
+                <input id="encryptEnd" name="validEndDate" type="datetime-local" step="1" placeholder="请选择结束时间">
+                <div class="hint">结束时间必须晚于开始时间。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="code">
+                <label for="encryptCode">Code</label>
+                <input id="encryptCode" name="code" type="text" placeholder="请输入授权 code">
+                <div class="hint">提交给原有加密方法的 code 字符串。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="output">
+                <label for="encryptOutput">输出目录</label>
+                <div class="control-row">
+                    <input id="encryptOutput" name="output" type="text" placeholder="请选择或填写输出文件夹路径">
+                    <button class="choose" type="button" data-choose="dir" data-target="encryptOutput" title="选择输出目录">...</button>
+                </div>
+                <div class="hint">输出加密结果的文件夹完整路径。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="includes">
+                <label for="includes">加密路径</label>
+                <textarea id="includes" class="pattern-box" name="includes" spellcheck="false" placeholder="一行一个 Ant 表达式&#10;org/example/**&#10;/**/*.yml"></textarea>
+                <div class="hint">每行一条规则；留空表示不额外添加 include。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="excludes">
+                <label for="excludes">排除路径</label>
+                <textarea id="excludes" class="pattern-box" name="excludes" spellcheck="false" placeholder="一行一个 Ant 表达式&#10;/static/**/*&#10;/public/**"></textarea>
+                <div class="hint">每行一条规则；留空表示不排除。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="actions">
+                <button class="submit" type="submit">开始加密打包</button>
+                <div class="status-wrap">
+                    <div class="status">等待提交</div>
+                    <div class="progress" aria-hidden="true"></div>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section id="license" class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>生成 license</h2>
+                <p class="panel-note">填写密码、code、有效期和输出目录后生成 license。</p>
+            </div>
+            <span class="badge">单独任务</span>
+        </div>
+        <form data-api="/api/license" data-kind="license" novalidate>
+            <div class="field" data-field="password">
+                <label for="licensePassword">密码</label>
+                <input id="licensePassword" name="password" type="password" autocomplete="new-password" placeholder="请输入生成 license 的密码">
+                <div class="hint">需要与加密任务使用的密码保持一致。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="code">
+                <label for="licenseCode">Code</label>
+                <input id="licenseCode" name="code" type="text" placeholder="请输入授权 code">
+                <div class="hint">提交给原有 license 方法的 code 字符串。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="validStartDate">
+                <label for="licenseStart">有效期开始</label>
+                <input id="licenseStart" name="validStartDate" type="datetime-local" step="1" placeholder="请选择开始时间">
+                <div class="hint">请选择日期和具体时间。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field" data-field="validEndDate">
+                <label for="licenseEnd">有效期结束</label>
+                <input id="licenseEnd" name="validEndDate" type="datetime-local" step="1" placeholder="请选择结束时间">
+                <div class="hint">结束时间必须晚于开始时间。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field full" data-field="jarArgs">
+                <label for="licenseJarArgs">启动参数</label>
+                <textarea id="licenseJarArgs" name="jarArgs" placeholder="可选，例如：-Xms512m -Xmx1024m -Dserver.port=8083"></textarea>
+                <div class="hint">可留空；原样提交给 license 方法。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="field full" data-field="output">
+                <label for="licenseOutput">license 输出目录</label>
+                <div class="control-row">
+                    <input id="licenseOutput" name="output" type="text" placeholder="请选择或填写 license 输出文件夹路径">
+                    <button class="choose" type="button" data-choose="dir" data-target="licenseOutput" title="选择 license 输出目录">...</button>
+                </div>
+                <div class="hint">输出 license 文件的文件夹完整路径。</div>
+                <div class="error"></div>
+            </div>
+
+            <div class="actions">
+                <button class="submit" type="submit">生成 license</button>
+                <div class="status-wrap">
+                    <div class="status">等待提交</div>
+                    <div class="progress" aria-hidden="true"></div>
+                </div>
+            </div>
+        </form>
+    </section>
+    </div>
+
+    <aside class="assistant" aria-label="启动参数助手">
+        <div>
+            <h3>参数助手</h3>
+            <p>新版 JDK 默认启用模块强封装，涉及类加载、反射或 URL 处理时，常需要打开少量 JDK 包。</p>
+        </div>
+        <div class="assistant-code" id="recommendedArgs">-XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED</div>
+        <div class="assistant-actions">
+            <button class="assistant-button primary" type="button" data-apply-args="replace">填入推荐</button>
+            <button class="assistant-button" type="button" data-apply-args="append">追加推荐</button>
+        </div>
+        <div class="param-list">
+            <div class="param-item">
+                <code>-XX:+DisableAttachMechanism</code>
+                <p>关闭 Attach 机制，减少运行中被 jcmd、jstack、调试器或外部 Agent 动态附加的入口。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/jdk.internal.loader=ALL-UNNAMED</code>
+                <p>打开 JDK 内部类加载器包；加密启动器、类加载增强或框架反射访问加载器内部状态时可能需要。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/java.lang=ALL-UNNAMED</code>
+                <p>打开 java.lang；反射访问 Class、ClassLoader、Thread、System 等核心类型内部成员时使用。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/java.net=ALL-UNNAMED</code>
+                <p>打开 java.net；涉及 URL、URLClassLoader、URLStreamHandler 或自定义资源协议处理时使用。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/java.io=ALL-UNNAMED</code>
+                <p>可选。反射访问 File、InputStream、URL 资源流或序列化相关内部字段时报错时再添加。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/java.lang.reflect=ALL-UNNAMED</code>
+                <p>可选。框架或 Agent 深度操作 Method、Field、Constructor 等反射对象时可能需要。</p>
+            </div>
+            <div class="param-item">
+                <code>--add-opens java.base/jdk.internal.reflect=ALL-UNNAMED</code>
+                <p>可选。遇到 JDK 内部反射实现访问限制时再添加，通常不建议无报错时盲目开启。</p>
+            </div>
+            <div class="param-item">
+                <code>-Dfile.encoding=UTF-8</code>
+                <p>固定文件编码，避免不同机器默认编码导致配置、日志或路径文本乱码。</p>
+            </div>
+            <div class="param-item">
+                <code>-Duser.timezone=Asia/Shanghai</code>
+                <p>固定 JVM 默认时区，避免服务器时区不同导致日志、授权时间或业务时间偏移。</p>
+            </div>
+            <div class="param-item">
+                <code>-Xms512m -Xmx1024m</code>
+                <p>设置初始和最大堆内存。一般建议 Xms 不大于 Xmx，按应用体量和机器内存调整。</p>
+            </div>
+            <div class="param-item">
+                <code>-XX:+UseG1GC</code>
+                <p>启用 G1 垃圾收集器，适合大多数服务端应用；新版 JDK 通常默认已经是 G1。</p>
+            </div>
+            <div class="param-item">
+                <code>-XX:MaxGCPauseMillis=200</code>
+                <p>给 G1 一个期望停顿目标，不是硬保证；接口服务可按延迟目标调整。</p>
+            </div>
+            <div class="param-item">
+                <code>-XX:+HeapDumpOnOutOfMemoryError</code>
+                <p>发生 OOM 时导出堆转储，便于定位内存泄漏或异常对象占用。</p>
+            </div>
+            <div class="param-item">
+                <code>-XX:HeapDumpPath=./logs/heapdump.hprof</code>
+                <p>指定堆转储文件位置。生产环境建议放到空间充足、可收集的目录。</p>
+            </div>
+            <div class="param-item">
+                <code>-XX:+ExitOnOutOfMemoryError</code>
+                <p>OOM 后直接退出进程，交给守护进程或容器重启，避免服务处于不可靠状态。</p>
+            </div>
+            <div class="param-item">
+                <code>-Xlog:gc*:file=./logs/gc.log:time,uptime,level,tags:filecount=5,filesize=20m</code>
+                <p>JDK 9+ GC 日志写法，保留滚动文件，方便观察停顿、回收频率和内存变化。</p>
+            </div>
+            <div class="param-item">
+                <code>-Dspring.profiles.active=prod</code>
+                <p>Spring Boot 常用环境参数，用于选择 prod、test、dev 等配置集。</p>
+            </div>
+            <div class="param-item">
+                <code>-Dserver.port=8080</code>
+                <p>Spring Boot 常用端口参数，需要固定端口或避开端口冲突时使用。</p>
+            </div>
+            <div class="param-item">
+                <code>-Djava.security.egd=file:/dev/./urandom</code>
+                <p>Linux 下减少旧环境随机数阻塞。新版 JDK 和大多数 Windows 场景通常不需要。</p>
+            </div>
+        </div>
+    </aside>
+    </div>
+</div>
+
+<script>
+    const platformValues = Array.from(document.querySelectorAll("#platformOptions option")).map(option => option.value);
+
+    document.querySelectorAll(".tab").forEach(button => {
+        button.addEventListener("click", () => {
+            document.querySelectorAll(".tab").forEach(item => item.setAttribute("aria-selected", "false"));
+            document.querySelectorAll(".panel").forEach(item => item.classList.remove("active"));
+            button.setAttribute("aria-selected", "true");
+            document.getElementById(button.dataset.tab).classList.add("active");
+        });
+    });
+
+    document.querySelectorAll("[data-choose]").forEach(button => {
+        button.addEventListener("click", async () => {
+            const target = document.getElementById(button.dataset.target);
+            const placeholder = target.placeholder;
+            button.disabled = true;
+            target.placeholder = "正在打开系统选择窗口，请留意任务栏或切换窗口...";
+            clearFieldError(target.form, target.name);
+            try {
+                const response = await fetch("/api/choose?type=" + encodeURIComponent(button.dataset.choose));
+                const data = await response.json();
+                if (!response.ok) {
+                    setFieldError(target.form, target.name, data.error || "打开选择窗口失败，请直接粘贴完整路径。");
+                    return;
+                }
+                if (data.path) {
+                    target.value = data.path;
+                    clearFieldError(target.form, target.name);
+                }
+            } catch (error) {
+                setFieldError(target.form, target.name, "打开选择窗口失败，请直接粘贴完整路径。");
+            } finally {
+                button.disabled = false;
+                target.placeholder = placeholder;
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-apply-args]").forEach(button => {
+        button.addEventListener("click", () => {
+            const target = document.getElementById("encryptJarArgs");
+            const recommended = document.getElementById("recommendedArgs").textContent.trim();
+            if (button.dataset.applyArgs === "append" && target.value.trim()) {
+                target.value = target.value.trim() + " " + recommended;
+            } else {
+                target.value = recommended;
+            }
+            clearFieldError(target.form, target.name);
+            target.focus();
+        });
+    });
+
+    document.querySelectorAll("input, textarea").forEach(control => {
+        control.addEventListener("input", () => clearFieldError(control.form, control.name));
+        control.addEventListener("change", () => clearFieldError(control.form, control.name));
+    });
+
+    document.querySelectorAll("form").forEach(form => {
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            clearErrors(form);
+            if (!validate(form)) {
+                form.querySelector(".status").className = "status error";
+                form.querySelector(".status").textContent = "请先修正表单中的红色提示。";
+                return;
+            }
+
+            setBusy(form, true, "任务提交中...");
+            try {
+                const response = await fetch(form.dataset.api, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+                    body: new URLSearchParams(new FormData(form))
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    showServerError(form, data.error || "提交失败，请检查填写内容。");
+                    setBusy(form, false);
+                    return;
+                }
+                poll(data.id, form);
+            } catch (error) {
+                form.querySelector(".status").className = "status error";
+                form.querySelector(".status").textContent = "提交失败，请确认本地服务仍在运行。";
+                setBusy(form, false);
+            }
+        });
+    });
+
+    function validate(form) {
+        let ok = true;
+        const requiredFields = form.dataset.kind === "encrypt"
+            ? ["inputJar", "password", "platform", "jdkZip", "goPath", "validStartDate", "validEndDate", "code", "output"]
+            : ["output", "password", "code", "validStartDate", "validEndDate"];
+
+        requiredFields.forEach(name => {
+            if (!value(form, name)) {
+                ok = fail(form, name, messageFor(name));
+            }
+        });
+
+        if (form.dataset.kind === "encrypt") {
+            const jar = value(form, "inputJar");
+            const zip = value(form, "jdkZip");
+            const platform = value(form, "platform").toUpperCase();
+            if (jar && !jar.toLowerCase().endsWith(".jar")) {
+                ok = fail(form, "inputJar", "请选择或填写 .jar 文件完整路径，例如 C:\\project\\target\\demo.jar。");
+            }
+            if (zip && !zip.toLowerCase().endsWith(".zip")) {
+                ok = fail(form, "jdkZip", "请选择或填写 .zip 文件完整路径，例如 C:\\jdk\\liberica-21.zip。");
+            }
+            if (platform && !platformValues.includes(platform)) {
+                ok = fail(form, "platform", "请从候选平台中选择一个完整值，例如 WINDOWS_AMD64。");
+            }
+            ["includes", "excludes"].forEach(name => {
+                const badLine = value(form, name).split(/\r?\n/).find(line => line.trim() && /\s/.test(line.trim()));
+                if (badLine) {
+                    ok = fail(form, name, "每行填写一条 Ant 表达式，不要在单条规则中包含空格。");
+                }
+            });
+            form.elements.platform.value = platform;
+        }
+
+        const start = value(form, "validStartDate");
+        const end = value(form, "validEndDate");
+        if (start && end && new Date(start).getTime() >= new Date(end).getTime()) {
+            ok = fail(form, "validEndDate", "结束时间必须晚于开始时间。");
+        }
+        return ok;
+    }
+
+    function messageFor(name) {
+        const messages = {
+            inputJar: "请选择或填写原始 Jar 的完整路径，文件后缀应为 .jar。",
+            password: "请输入密码，不能为空。",
+            platform: "请选择目标平台，可输入关键词后从候选项中选择。",
+            jdkZip: "请选择或填写 JDK zip 的完整路径，文件后缀应为 .zip。",
+            goPath: "请选择或填写 Go bin 文件夹完整路径。",
+            validStartDate: "请选择有效期开始日期和时间。",
+            validEndDate: "请选择有效期结束日期和时间。",
+            code: "请输入授权 code，不能为空。",
+            output: "请选择或填写输出文件夹完整路径。"
+        };
+        return messages[name] || "请按提示填写此项。";
+    }
+
+    function value(form, name) {
+        return form.elements[name] ? form.elements[name].value.trim() : "";
+    }
+
+    function fail(form, name, message) {
+        setFieldError(form, name, message);
+        return false;
+    }
+
+    function setFieldError(form, name, message) {
+        const field = form.querySelector(`[data-field="${name}"]`);
+        if (!field) return;
+        field.classList.add("invalid");
+        field.querySelector(".error").textContent = message;
+    }
+
+    function clearFieldError(form, name) {
+        if (!form || !name) return;
+        const field = form.querySelector(`[data-field="${name}"]`);
+        if (!field) return;
+        field.classList.remove("invalid");
+        field.querySelector(".error").textContent = "";
+    }
+
+    function clearErrors(form) {
+        form.querySelectorAll(".field").forEach(field => {
+            field.classList.remove("invalid");
+            field.querySelector(".error").textContent = "";
+        });
+    }
+
+    function showServerError(form, message) {
+        const normalized = message.toLowerCase();
+        const match = ["inputJar", "password", "platform", "jdkZip", "goPath", "validStartDate", "validEndDate", "code", "output"]
+            .find(name => normalized.includes(name.toLowerCase()));
+        if (match) {
+            setFieldError(form, match, message);
+        }
+        form.querySelector(".status").className = "status error";
+        form.querySelector(".status").textContent = message;
+    }
+
+    function setBusy(form, busy, message) {
+        form.querySelectorAll("button").forEach(button => button.disabled = busy);
+        form.querySelector(".progress").classList.toggle("active", busy);
+        if (message) {
+            const status = form.querySelector(".status");
+            status.className = "status";
+            status.textContent = message;
+        }
+    }
+
+    async function poll(id, form) {
+        const status = form.querySelector(".status");
+        try {
+            const response = await fetch("/api/status?id=" + encodeURIComponent(id));
+            const data = await response.json();
+            status.textContent = data.message;
+            if (data.state === "DONE") {
+                status.className = "status ok";
+                setBusy(form, false);
+                return;
+            }
+            if (data.state === "ERROR") {
+                status.className = "status error";
+                setBusy(form, false);
+                return;
+            }
+            setTimeout(() => poll(id, form), 1200);
+        } catch (error) {
+            status.className = "status error";
+            status.textContent = "读取任务进度失败，请确认本地服务仍在运行。";
+            setBusy(form, false);
+        }
+    }
+</script>
+</body>
+</html>

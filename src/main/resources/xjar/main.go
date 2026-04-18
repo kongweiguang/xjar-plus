@@ -34,62 +34,61 @@ var resource embed.FS
 
 func main() {
 	license, err := readLicense()
-
 	if err != nil {
-		fmt.Println(err.Error())
+		warnf("license file is unavailable or invalid")
 	}
 
 	duration, extArgs, err := checkDate(license)
 	if err != nil {
-		exitWithMsg(err.Error())
+		exitWithErr("E_VALIDITY", "license validity check failed", err)
 	}
 
 	jdkPath := filepath.Join(os.TempDir(), "deploy", tempDirName(code), "jdk")
 
 	if err := preEnv(jdkPath); err != nil {
-		exitWithMsg("pre")
+		exitWithErr("E_RUNTIME", "runtime environment initialization failed", err)
 	}
 
 	if err := runApp(jdkPath, extArgs, duration); err != nil {
-		exitWithMsg("run")
+		exitWithErr("E_APP", "application startup failed", err)
 	}
-
 }
 
 func readLicense() (*License, error) {
 	exePath, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("locate executable: %w", err)
 	}
-	cipherData, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "key.x"))
+	licensePath := filepath.Join(filepath.Dir(exePath), "key.x")
+	cipherData, err := os.ReadFile(licensePath)
 
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("read license file: %w", err)
 	}
 
 	key, err := hex.DecodeString(hexKey)
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("decode license key: %w", err)
 	}
 	iv, err := hex.DecodeString(hexIV)
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("decode license iv: %w", err)
 	}
 	plain, err := decryptAesCbc(cipherData, key, iv)
 
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("decrypt license file: %w", err)
 	}
 
 	var lcs License
 	err = json.Unmarshal(plain, &lcs)
 
 	if err != nil {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("parse license file: %w", err)
 	}
 
 	if code != lcs.Code {
-		return nil, fmt.Errorf("license error")
+		return nil, fmt.Errorf("license is not valid for this application")
 	}
 
 	return &lcs, nil
@@ -97,29 +96,30 @@ func readLicense() (*License, error) {
 
 func preEnv(jdkPath string) error {
 	if err := os.RemoveAll(jdkPath); err != nil {
-		return err
+		return fmt.Errorf("clean runtime directory: %w", err)
 	}
 
 	jdkZip, err := resource.ReadFile(jdkZipPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read embedded runtime: %w", err)
 	}
 
 	if err := unzip4Bytes(jdkZip, jdkPath); err != nil {
-		return err
+		return fmt.Errorf("extract runtime: %w", err)
 	}
 
 	if err := chmodJdkCommands(jdkPath); err != nil {
-		return err
+		return fmt.Errorf("chmod jdk commands: %w", err)
 	}
 
 	appJar, err := resource.ReadFile(jarPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read embedded application: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(jdkPath, "bin", "app.jar"), appJar, os.ModePerm); err != nil {
-		return err
+	appPath := filepath.Join(jdkPath, "bin", "app.jar")
+	if err := os.WriteFile(appPath, appJar, 0644); err != nil {
+		return fmt.Errorf("write application file: %w", err)
 	}
 
 	return nil
@@ -156,7 +156,7 @@ func chmodJdkCommands(jdkPath string) error {
 func runApp(jdkPath, extArgs string, duration time.Duration) error {
 	args, err := parseArgs(strings.Join([]string{"#{jarArgs}", extArgs}, " "))
 	if err != nil {
-		return err
+		return fmt.Errorf("parse java args: %w", err)
 	}
 	args = append(args, "-jar", "app.jar")
 
@@ -167,7 +167,8 @@ func runApp(jdkPath, extArgs string, duration time.Duration) error {
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(ctx, filepath.Join(jdkPath, "bin", "java"), args...)
+	javaPath := filepath.Join(jdkPath, "bin", "java")
+	cmd := exec.CommandContext(ctx, javaPath, args...)
 	cmd.Dir = filepath.Join(jdkPath, "bin")
 	cmd.Stdin = bytes.NewReader(encodeKey())
 	cmd.Stdout = os.Stdout
@@ -175,10 +176,15 @@ func runApp(jdkPath, extArgs string, duration time.Duration) error {
 
 	err = cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
-		fmt.Println("stop process")
-		return ctx.Err()
+		return fmt.Errorf("process timed out after %s", duration)
 	}
-	return err
+	if err == nil {
+		return nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return fmt.Errorf("application process exited with code %d", exitErr.ExitCode())
+	}
+	return fmt.Errorf("start application process: %w", err)
 }
 
 func parseArgs(input string) ([]string, error) {
@@ -249,11 +255,9 @@ func checkDate(lcs *License) (time.Duration, string, error) {
 	args := ""
 
 	if lcs == nil {
-		fmt.Println("failed to read key.x -> use app key info ")
 		vsd = validStartDate
 		ved = validEndDate
 	} else {
-		fmt.Println("success to read key.x -> use license key info ")
 		vsd = lcs.ValidStartDate
 		ved = lcs.ValidEndDate
 		args = lcs.Args
@@ -264,11 +268,11 @@ func checkDate(lcs *License) (time.Duration, string, error) {
 
 	start, err := time.ParseInLocation(dateFormat, vsd, loc)
 	if err != nil {
-		return -1, args, fmt.Errorf("date parse error")
+		return -1, args, fmt.Errorf("invalid start date")
 	}
 
 	if now.Before(start) {
-		return -1, args, fmt.Errorf("date expired")
+		return -1, args, fmt.Errorf("application is not valid yet")
 	}
 
 	if ved == "" {
@@ -277,11 +281,11 @@ func checkDate(lcs *License) (time.Duration, string, error) {
 
 	end, err := time.ParseInLocation(dateFormat, ved, loc)
 	if err != nil {
-		return -1, args, fmt.Errorf("date parse error")
+		return -1, args, fmt.Errorf("invalid end date")
 	}
 
 	if now.After(end) {
-		return -1, args, fmt.Errorf("date expired")
+		return -1, args, fmt.Errorf("application has expired")
 	}
 
 	return end.Sub(now), args, nil
@@ -309,7 +313,7 @@ func unPKCS5Padding(data []byte) ([]byte, error) {
 func decryptAesCbc(cipherData, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher")
+		return nil, fmt.Errorf("create cipher: %w", err)
 	}
 
 	if len(iv) != block.BlockSize() {
@@ -336,7 +340,7 @@ func unzip4Bytes(data []byte, dest string) error {
 
 	cleanDest, err := filepath.Abs(dest)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve destination: %w", err)
 	}
 
 	for _, f := range zr.File {
@@ -344,66 +348,89 @@ func unzip4Bytes(data []byte, dest string) error {
 			return fmt.Errorf("invalid file path: %s", f.Name)
 		}
 
-		target := filepath.Join(dest, f.Name)
+		target := filepath.Join(cleanDest, f.Name)
 		cleanTarget, err := filepath.Abs(target)
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve runtime file: %w", err)
 		}
-		if cleanTarget != cleanDest && !strings.HasPrefix(cleanTarget, cleanDest+string(os.PathSeparator)) {
-			return fmt.Errorf("invalid file path: %s", f.Name)
+		rel, err := filepath.Rel(cleanDest, cleanTarget)
+		if err != nil {
+			return fmt.Errorf("check runtime file: %w", err)
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid runtime file path")
 		}
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, os.ModePerm); err != nil {
-				return fmt.Errorf("mkdir: %w", err)
+				return fmt.Errorf("create runtime directory: %w", err)
 			}
 			continue
 		}
 
 		if err := os.MkdirAll(filepath.Dir(target), os.ModePerm); err != nil {
-			return fmt.Errorf("mkdir parent: %w", err)
+			return fmt.Errorf("create runtime parent directory: %w", err)
 		}
 
 		src, err := f.Open()
 		if err != nil {
-			return fmt.Errorf("open zip file: %w", err)
+			return fmt.Errorf("open runtime archive entry: %w", err)
 		}
 
 		dst, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
 			if closeErr := src.Close(); closeErr != nil {
-				return closeErr
+				return fmt.Errorf("close runtime archive entry after create failed: %w", closeErr)
 			}
-			return fmt.Errorf("create file: %w", err)
+			return fmt.Errorf("create runtime file: %w", err)
 		}
 
 		if _, err := io.Copy(dst, src); err != nil {
 			if closeErr := src.Close(); closeErr != nil {
-				return closeErr
+				return fmt.Errorf("close runtime archive entry after copy failed: %w", closeErr)
 			}
 			if closeErr := dst.Close(); closeErr != nil {
-				return closeErr
+				return fmt.Errorf("close runtime file after copy failed: %w", closeErr)
 			}
-			return fmt.Errorf("copy file: %w", err)
+			return fmt.Errorf("copy runtime file: %w", err)
 		}
 
 		err = src.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("close runtime archive entry: %w", err)
 		}
 
 		err = dst.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("close runtime file: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func exitWithMsg(msg string) {
-	fmt.Println(msg)
-	os.Exit(666)
+func warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "warning: "+format+"\n", args...)
+}
+
+func exitWithErr(code, message string, err error) {
+	fmt.Fprintf(os.Stderr, "%s: %s", code, message)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, ": %s", publicErr(err))
+	}
+	fmt.Fprintln(os.Stderr)
+	os.Exit(1)
+}
+
+func publicErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, string(os.PathSeparator)) || strings.Contains(msg, ":\\") || strings.Contains(msg, "/") {
+		return "please check the local runtime files and permissions"
+	}
+	return msg
 }
 
 type XKey struct {
