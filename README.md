@@ -51,7 +51,7 @@ mvn clean install
 <dependency>
     <groupId>io.xjar</groupId>
     <artifactId>xjar-plus</artifactId>
-    <version>4.0.2</version>
+    <version>1.0</version>
 </dependency>
 ```
 
