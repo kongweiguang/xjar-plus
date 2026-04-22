@@ -22,6 +22,7 @@ import java.util.Set;
  * XJar 工具类，包含I/O，密钥，过滤器的工具方法。
  */
 public abstract class XKit implements XConstants {
+    private static final int TRANSFER_BUFFER_SIZE = 32 * 1024;
 
     /**
      * 从输入流中读取一行字节码
@@ -119,7 +120,7 @@ public abstract class XKit implements XConstants {
      */
     public static long transfer(InputStream in, OutputStream out) throws IOException {
         long total = 0;
-        byte[] buffer = new byte[4096];
+        byte[] buffer = new byte[TRANSFER_BUFFER_SIZE];
         int length;
         while ((length = in.read(buffer)) != -1) {
             out.write(buffer, 0, length);

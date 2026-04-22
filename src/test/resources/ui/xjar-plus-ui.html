@@ -559,7 +559,7 @@
 
             <div class="field full" data-field="jarArgs">
                 <label for="encryptJarArgs">启动参数</label>
-                <textarea id="encryptJarArgs" name="jarArgs" placeholder="可选，例如：-Xms512m -Xmx1024m --add-opens ..."></textarea>
+                <textarea id="encryptJarArgs" name="jarArgs" placeholder="可选，例如：-Xms512m -Xmx1024m"></textarea>
                 <div class="hint">可留空；多个参数按实际启动参数格式填写。</div>
                 <div class="error"></div>
             </div>
@@ -707,9 +707,9 @@
     <aside class="assistant" aria-label="启动参数助手">
         <div>
             <h3>参数助手</h3>
-            <p>新版 JDK 默认启用模块强封装，涉及类加载、反射或 URL 处理时，常需要打开少量 JDK 包。</p>
+            <p>xjar-plus 的启动加载链路不需要打开 JDK 内部包；业务依赖报模块访问问题时，再按具体异常最小化处理。</p>
         </div>
-        <div class="assistant-code" id="recommendedArgs">-XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED</div>
+        <div class="assistant-code" id="recommendedArgs">-XX:+DisableAttachMechanism</div>
         <div class="assistant-actions">
             <button class="assistant-button primary" type="button" data-apply-args="replace">填入推荐</button>
             <button class="assistant-button" type="button" data-apply-args="append">追加推荐</button>
@@ -718,30 +718,6 @@
             <div class="param-item">
                 <code>-XX:+DisableAttachMechanism</code>
                 <p>关闭 Attach 机制，减少运行中被 jcmd、jstack、调试器或外部 Agent 动态附加的入口。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/jdk.internal.loader=ALL-UNNAMED</code>
-                <p>打开 JDK 内部类加载器包；加密启动器、类加载增强或框架反射访问加载器内部状态时可能需要。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/java.lang=ALL-UNNAMED</code>
-                <p>打开 java.lang；反射访问 Class、ClassLoader、Thread、System 等核心类型内部成员时使用。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/java.net=ALL-UNNAMED</code>
-                <p>打开 java.net；涉及 URL、URLClassLoader、URLStreamHandler 或自定义资源协议处理时使用。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/java.io=ALL-UNNAMED</code>
-                <p>可选。反射访问 File、InputStream、URL 资源流或序列化相关内部字段时报错时再添加。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/java.lang.reflect=ALL-UNNAMED</code>
-                <p>可选。框架或 Agent 深度操作 Method、Field、Constructor 等反射对象时可能需要。</p>
-            </div>
-            <div class="param-item">
-                <code>--add-opens java.base/jdk.internal.reflect=ALL-UNNAMED</code>
-                <p>可选。遇到 JDK 内部反射实现访问限制时再添加，通常不建议无报错时盲目开启。</p>
             </div>
             <div class="param-item">
                 <code>-Dfile.encoding=UTF-8</code>

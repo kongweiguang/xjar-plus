@@ -4,19 +4,19 @@ import io.xjar.XDecryptor;
 import io.xjar.XEncryptor;
 import io.xjar.XKit;
 import io.xjar.key.XKey;
-import io.xjar.reflection.XReflection;
 import org.springframework.boot.loader.launch.LaunchedClassLoader;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.net.MalformedURLException;
+import java.net.JarURLConnection;
 import java.net.URL;
-import java.net.URLClassLoader;
+import java.net.URLConnection;
 import java.security.CodeSigner;
 import java.security.CodeSource;
 import java.util.Enumeration;
+import java.util.jar.Manifest;
 
 
 /**
@@ -27,10 +27,6 @@ import java.util.Enumeration;
  */
 public class XBootClassLoader extends LaunchedClassLoader {
     private final XBootURLHandler xBootURLHandler;
-    private final Object urlClassPath;
-    private final Method getResource;
-    private final Method getCodeSourceURL;
-    private final Method getCodeSigners;
 
     static {
         ClassLoader.registerAsParallelCapable();
@@ -39,10 +35,6 @@ public class XBootClassLoader extends LaunchedClassLoader {
     public XBootClassLoader(URL[] urls, ClassLoader parent, XDecryptor xDecryptor, XEncryptor xEncryptor, XKey xKey) throws Exception {
         super(true, urls, parent);
         this.xBootURLHandler = new XBootURLHandler(xDecryptor, xEncryptor, xKey, this);
-        this.urlClassPath = XReflection.field(URLClassLoader.class, "ucp").get(this).value();
-        this.getResource = XReflection.method(urlClassPath.getClass(), "getResource", String.class).method();
-        this.getCodeSourceURL = XReflection.method(getResource.getReturnType(), "getCodeSourceURL").method();
-        this.getCodeSigners = XReflection.method(getResource.getReturnType(), "getCodeSigners").method();
     }
 
     @Override
@@ -69,26 +61,53 @@ public class XBootClassLoader extends LaunchedClassLoader {
 
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
-        try {
+        String path = name.replace('.', '/').concat(".class");
+        if (!xBootURLHandler.isEncrypted(path)) {
             return super.findClass(name);
-        } catch (ClassFormatError e) {
-            String path = name.replace('.', '/').concat(".class");
-            URL url = findResource(path);
-            if (url == null) {
-                throw new ClassNotFoundException(name, e);
-            }
-            try (InputStream in = url.openStream()) {
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                XKit.transfer(in, bos);
-                byte[] bytes = bos.toByteArray();
-                Object resource = getResource.invoke(urlClassPath, path);
-                URL codeSourceURL = (URL) getCodeSourceURL.invoke(resource);
-                CodeSigner[] codeSigners = (CodeSigner[]) getCodeSigners.invoke(resource);
-                CodeSource codeSource = new CodeSource(codeSourceURL, codeSigners);
+        }
+        URL url = findResource(path);
+        if (xBootURLHandler.isEncrypted(url)) {
+            try {
+                byte[] bytes = read(url);
+                definePackageIfNecessary(name, url);
+                CodeSource codeSource = new CodeSource(url, (CodeSigner[]) null);
                 return defineClass(name, bytes, 0, bytes.length, codeSource);
             } catch (Throwable t) {
                 throw new ClassNotFoundException(name, t);
             }
+        }
+        return super.findClass(name);
+    }
+
+    private byte[] read(URL url) throws IOException {
+        try (InputStream in = url.openStream()) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            XKit.transfer(in, bos);
+            return bos.toByteArray();
+        }
+    }
+
+    private void definePackageIfNecessary(String className, URL url) throws IOException {
+        int index = className.lastIndexOf('.');
+        if (index < 0) {
+            return;
+        }
+        String packageName = className.substring(0, index);
+        if (getDefinedPackage(packageName) != null) {
+            return;
+        }
+        try {
+            URLConnection connection = url.openConnection();
+            if (connection instanceof JarURLConnection) {
+                JarURLConnection jarConnection = (JarURLConnection) connection;
+                Manifest manifest = jarConnection.getManifest();
+                URL sourceUrl = jarConnection.getJarFileURL();
+                definePackage(packageName, manifest, sourceUrl);
+            } else {
+                definePackage(packageName, null, null, null, null, null, null, null);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Another parallel class load may have defined the package first.
         }
     }
 

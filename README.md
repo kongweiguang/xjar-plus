@@ -72,7 +72,7 @@ public class MyTest {
                 // 加密密码，后续生成 license 时也要使用同一个密码
                 .password("woshimimao")
                 // 启动 Jar 时追加到 java 命令后的参数
-                .jarArgs("-XX:+DisableAttachMechanism --add-opens java.base/jdk.internal.loader=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED")
+                .jarArgs("-XX:+DisableAttachMechanism")
                 // 随启动器分发的 JDK zip，建议使用目标机器系统对应的 JDK
                 .jdkZip("C:\\Users\\24052\\.jdks\\liberica-21.0.7.zip")
                 // 需要加密的路径，支持 Ant 风格匹配
@@ -187,8 +187,7 @@ boboji
 java 自定义参数 -jar app.jar
 ```
 
-示例中建议加上 `-XX:+DisableAttachMechanism`，可以降低通过 Arthas 一类工具 attach 到 JVM 后获取运行时 class 信息的风险。JDK
-17/21 运行 Spring Boot 3 时，如果遇到模块访问问题，可以按示例添加 `--add-opens` 参数。
+示例中建议加上 `-XX:+DisableAttachMechanism`，可以降低通过 Arthas 一类工具 attach 到 JVM 后获取运行时 class 信息的风险。xjar-plus 的启动加载链路不需要 `--add-opens`；如果业务依赖自身在 JDK 17/21 下仍提示模块访问问题，应优先升级对应依赖，再按具体异常最小化添加参数。
 
 ### jdkZip
 

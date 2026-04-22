@@ -244,23 +244,29 @@ public class XEncryption {
      * @throws Exception 任一步骤失败时抛出异常
      */
     public void ok() throws Exception {
+        long startedAt = System.currentTimeMillis();
+
         validate();
 
-        System.out.println("开始加密。。。");
         XMixEntryFilter<JarArchiveEntry> filter = buildFilter();
         Path resource = Paths.get(output, "resource");
+
+        printProgress(1, 5, "准备输出目录", resource.toString());
         Files.createDirectories(resource);
+
+        printProgress(2, 5, "复制运行时 JDK", jdkZip);
         addJdk(output);
 
+        printProgress(3, 5, "加密 Jar", inputJar + " -> " + resource.resolve(DEFAULT_APP_NAME));
         XCryptos.encrypt(new File(inputJar), resource.resolve(DEFAULT_APP_NAME).toFile(), key, filter);
 
-        System.out.println("加密完成。。。");
-
+        printProgress(4, 5, "生成启动器源码", Paths.get(output, "main.go").toString());
         XGo.make(output, key, code, DEFAULT_APP_NAME, jarArgs, validStartDate, validEndDate);
 
-        System.out.println("开始打包。。。");
-
+        printProgress(5, 5, "编译可执行文件", platform.goos() + "/" + platform.goarch());
         buildPKG(output);
+
+        printDone("加密打包完成", "输出目录: " + output + ", 用时: " + formatDuration(System.currentTimeMillis() - startedAt));
     }
 
     /**
@@ -330,7 +336,6 @@ public class XEncryption {
         if (exitCode != 0) {
             throw new IllegalStateException("打包失败，go build 退出码: " + exitCode);
         }
-        System.out.println("打包完成。。。");
     }
 
 
@@ -344,5 +349,42 @@ public class XEncryption {
         Path sourcePath = Paths.get(jdkZip);    // 源ZIP文件路径
         Path targetPath = Paths.get(to, "resource", "jdk.zip"); // 目标路径
         Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /**
+     * 打印主流程进度。
+     */
+    private void printProgress(int step, int total, String action, String detail) {
+        System.out.printf("[xjar-plus] [%d/%d] %s%n", step, total, action);
+        if (detail != null && !detail.isBlank()) {
+            System.out.printf("[xjar-plus]       %s%n", detail);
+        }
+    }
+
+    /**
+     * 打印流程完成信息。
+     */
+    private void printDone(String action, String detail) {
+        System.out.printf("[xjar-plus] [done] %s%n", action);
+        if (detail != null && !detail.isBlank()) {
+            System.out.printf("[xjar-plus]        %s%n", detail);
+        }
+    }
+
+    /**
+     * 将毫秒耗时格式化为易读文本。
+     */
+    private String formatDuration(long millis) {
+        long seconds = millis / 1000;
+        long minutes = seconds / 60;
+        long remainingSeconds = seconds % 60;
+        long remainingMillis = millis % 1000;
+        if (minutes > 0) {
+            return String.format("%dm %02ds", minutes, remainingSeconds);
+        }
+        if (seconds > 0) {
+            return String.format("%d.%03ds", seconds, remainingMillis);
+        }
+        return millis + "ms";
     }
 }

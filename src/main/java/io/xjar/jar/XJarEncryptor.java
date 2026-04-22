@@ -7,6 +7,7 @@ import org.apache.commons.compress.archivers.jar.JarArchiveInputStream;
 import org.apache.commons.compress.archivers.jar.JarArchiveOutputStream;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.jar.Attributes;
@@ -112,8 +113,8 @@ public class XJarEncryptor extends XEntryEncryptor<JarArchiveEntry> implements X
                 xjarInfIdx.setTime(System.currentTimeMillis());
                 zos.putArchiveEntry(xjarInfIdx);
                 for (String index : indexes) {
-                    zos.write(index.getBytes());
-                    zos.write(CRLF.getBytes());
+                    zos.write(index.getBytes(StandardCharsets.UTF_8));
+                    zos.write(CRLF.getBytes(StandardCharsets.UTF_8));
                 }
                 zos.closeArchiveEntry();
             }
