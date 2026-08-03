@@ -6,9 +6,33 @@ import io.xjar.utils.Platform;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class MyTest {
     public static void main(String[] args) throws Exception {
+        testThreeGorgesLinuxPackage();
+    }
+
+    public static void testThreeGorgesLinuxPackage() throws Exception {
+        String validStartDate = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+        XCryptos.encryption()
+                .inputJar("C:\\dev\\java\\xm\\three-gorges\\three-gorges-back\\three-gorges-start\\target\\three-gorges-start.jar")
+                .password("woshimimao")
+                .jarArgs("-XX:+DisableAttachMechanism")
+                .jdkZip("C:\\Users\\24052\\.jdks\\jdk-21.0.2.zip")
+                .goPath("C:\\Users\\24052\\sdk\\go1.24.3\\bin")
+                .platform(Platform.LINUX_AMD64)
+                .validStartDate(validStartDate)
+                .validEndDate("2026-08-03 14:30:00")
+                .code("three-gorges")
+                .output("C:\\dev\\java\\xm\\three-gorges\\three-gorges-back\\three-gorges-start\\target\\three-gorges-linux-20260803-1430")
+                .ok();
+    }
+
+    private static void example() throws Exception {
         // 加密jar包
         XCryptos.encryption()
                 //原始jar

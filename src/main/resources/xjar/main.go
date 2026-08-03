@@ -11,7 +11,7 @@
 //
 // 环境变量：
 //
-//	XJAR_LICENSE_HTTP_ADDR  授权状态服务监听地址（默认从 127.0.0.1:19527 起尝试，勿对外暴露）
+//	XJAR_LICENSE_HTTP_ADDR  授权状态服务监听地址（默认从 0.0.0.0:19527 起尝试）
 //
 // 文件内按职责分区，从上到下：
 //
@@ -37,8 +37,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -69,7 +71,7 @@ const (
 	// code 应用编码，用于校验授权文件归属
 	code = "#{code}"
 	// licenseHTTPEnv 授权状态服务监听地址的环境变量名。
-	// 不设置时使用默认回环地址，不会对外暴露。
+	// 不设置时监听所有 IPv4 网卡，允许通过局域网访问。
 	licenseHTTPEnv = "XJAR_LICENSE_HTTP_ADDR"
 	// licenseHTTPPrefix 授权状态服务所有接口的统一路径前缀。
 	licenseHTTPPrefix = "/xjp"
@@ -212,15 +214,16 @@ func main() {
 	if err := run(); err != nil {
 		exitWithErr(err) // 打印失败提示框后退出，永不返回
 	}
-	// 走到这里说明应用进程正常退出（退出码 0）
-	fmt.Println(paint(ansiGreen, "应用已正常退出"))
+	// 走到这里说明启动流程已正常结束，或启动器收到退出信号。
+	fmt.Println(paint(ansiGreen, "启动器已正常退出"))
 }
 
 // run 串联整个启动流程，共 5 个步骤：
 //  1. 校验授权文件  2. 校验授权有效期  3. 启动授权状态服务
 //  4. 准备运行环境  5. 启动应用（阻塞至应用退出）
 //
-// 任何步骤失败都会以分类错误码终止启动（fail fast），并给出修复建议。
+// 非预期失败会以分类错误码终止启动（fail fast）；授权到期属于正常状态，
+// 只停止或跳过业务应用，并保留授权状态服务直到收到退出信号。
 func run() error {
 	// 先读取授权文件：读取失败不阻断启动，回退到内置有效期并给出警告
 	license, licenseErr := readLicense()
@@ -241,7 +244,8 @@ func run() error {
 	// 步骤 2/5：校验授权有效期
 	steps.begin("校验授权有效期")
 	duration, extArgs, validityErr := checkValidity(license)
-	if validityErr != nil {
+	expiredAtStartup := errors.Is(validityErr, errLicenseExpired)
+	if validityErr != nil && !expiredAtStartup {
 		steps.fail()
 		return newExitError("E_VALIDITY", "授权校验失败", validityErr)
 	}
@@ -249,7 +253,9 @@ func run() error {
 	if license != nil {
 		perpetual = license.ValidEndDate == ""
 	}
-	if perpetual {
+	if expiredAtStartup {
+		steps.warn("授权已到期，应用不会启动")
+	} else if perpetual {
 		steps.ok("永久有效")
 	} else {
 		steps.ok(fmt.Sprintf("剩余有效期: %s", formatDuration(duration)))
@@ -262,7 +268,12 @@ func run() error {
 		steps.fail()
 		return newExitError("E_STATUS", "授权状态服务启动失败", err)
 	}
-	steps.ok(fmt.Sprintf("访问地址: http://%s%s/license", statusAddr, licenseHTTPPrefix))
+	steps.ok(fmt.Sprintf("访问地址: http://%s%s/license/status", statusAddr, licenseHTTPPrefix))
+	if expiredAtStartup {
+		fmt.Println(paint(ansiYellow, "授权状态服务将继续运行，业务应用未启动"))
+		waitForShutdown()
+		return nil
+	}
 
 	// 步骤 4/5：准备运行环境（解压 JDK、写入应用 jar、设置执行权限）
 	steps.begin("准备运行环境")
@@ -278,6 +289,11 @@ func run() error {
 		// 进程创建成功后立即提示，让用户先看到"已启动"再看到应用自身日志
 		steps.ok(fmt.Sprintf("进程已创建 (PID: %d)", pid))
 	})
+	if errors.Is(err, errLicenseExpired) {
+		fmt.Println(paint(ansiYellow, "授权已到期，应用进程已停止；授权状态服务将继续运行"))
+		waitForShutdown()
+		return nil
+	}
 	if err != nil {
 		steps.fail()
 		return newExitError("E_APP", "应用运行异常", err)
@@ -345,7 +361,7 @@ func readLicense() (*License, error) {
 }
 
 // checkValidity 校验授权有效期，返回剩余时长与应用启动参数。
-// 永久有效（ValidEndDate 为空）时 duration 为 -1；校验失败返回具体原因。
+// 永久有效（ValidEndDate 为空）时 duration 为 -1；授权到期返回 errLicenseExpired。
 func checkValidity(lic *License) (time.Duration, string, error) {
 	startStr, endStr, args := validStartDate, validEndDate, ""
 	if lic != nil {
@@ -371,7 +387,7 @@ func checkValidity(lic *License) (time.Duration, string, error) {
 		return -1, args, fmt.Errorf("invalid end date")
 	}
 	if now.After(end) {
-		return -1, args, fmt.Errorf("application has expired")
+		return -1, args, errLicenseExpired
 	}
 
 	return end.Sub(now), args, nil
@@ -467,7 +483,7 @@ func startStatusServer(lic *License, licenseErr error) (string, error) {
 		// 未配置时从默认端口开始，依次尝试后续 30 个端口。
 		var lastErr error
 		for port := defaultLicenseHTTPPort; port <= defaultLicenseHTTPPort+licenseHTTPPortFallbacks; port++ {
-			candidate := fmt.Sprintf("127.0.0.1:%d", port)
+			candidate := fmt.Sprintf("0.0.0.0:%d", port)
 			ln, lastErr = net.Listen("tcp", candidate)
 			if lastErr == nil {
 				break
@@ -485,7 +501,6 @@ func startStatusServer(lic *License, licenseErr error) (string, error) {
 
 	mux := http.NewServeMux()
 	statusHandler := statusHandlerFunc(lic, licenseErr)
-	mux.HandleFunc(licenseHTTPPrefix+"/license", statusHandler)
 	mux.HandleFunc(licenseHTTPPrefix+"/license/status", statusHandler)
 	mux.HandleFunc(licenseHTTPPrefix+"/healthz", healthzHandler)
 
@@ -712,9 +727,13 @@ func unzipFromBytes(data []byte, dest string) error {
 // 应用进程启动
 // ---------------------------------------------------------------------------
 
+// errLicenseExpired 表示授权已经到期，或应用因为授权在运行期间到期而被停止。
+// 这是预期的生命周期状态，不应导致启动器及授权状态服务退出。
+var errLicenseExpired = errors.New("application has expired")
+
 // launchApp 启动并等待应用进程结束。
 // started 回调在进程创建成功后调用（用于输出"已启动"提示）；
-// 返回 nil 表示应用进程正常退出（退出码 0）。
+// 返回 nil 表示应用进程正常退出（退出码 0），运行期间授权到期返回 errLicenseExpired。
 func launchApp(jdkPath, extArgs string, duration time.Duration, started func(pid int)) error {
 	args, err := parseArgs(strings.Join([]string{"#{jarArgs}", extArgs}, " "))
 	if err != nil {
@@ -747,7 +766,7 @@ func launchApp(jdkPath, extArgs string, duration time.Duration, started func(pid
 
 	err = cmd.Wait()
 	if ctx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("process timed out after %s", duration)
+		return fmt.Errorf("%w after %s", errLicenseExpired, duration)
 	}
 	if err == nil {
 		return nil
@@ -756,6 +775,16 @@ func launchApp(jdkPath, extArgs string, duration time.Duration, started func(pid
 		return fmt.Errorf("application process exited with code %d", exitErr.ExitCode())
 	}
 	return fmt.Errorf("wait application process: %w", err)
+}
+
+// waitForShutdown 在应用因授权到期停止后保持启动器存活，让授权状态接口继续可用。
+// 收到 Ctrl+C 或 SIGTERM 后才结束等待，由 main 正常退出启动器。
+func waitForShutdown() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	<-ctx.Done()
+	fmt.Println(paint(ansiYellow, "收到退出信号，正在关闭启动器"))
 }
 
 // encodeKey 将密钥信息编码为应用进程通过标准输入读取的格式（每行一个字段）。
