@@ -537,9 +537,7 @@ func statusHandlerFunc(lic *License, licenseErr error) http.HandlerFunc {
 		// 授权状态是动态数据，禁止代理与浏览器缓存
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if !status.Valid {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
+		// 接口可访问即返回 200；授权是否有效由响应体中的 valid 和 message 表达。
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(status); err != nil {
