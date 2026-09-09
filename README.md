@@ -1,9 +1,28 @@
-# xjar-plus 新手指南
+# xjar-plus
 
-xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，当前项目主要适配 Spring Boot 3.4.2 + JDK 21。它可以把原始 Jar
+xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，支持 Spring Boot 3.4.2、普通可执行 JAR，以及 Solon 默认嵌套 JAR（已验证 Solon 4.1.0 + JDK 25）。工具本身使用 JDK 21 构建。它可以把原始 Jar
 中指定路径的 class 或资源加密，并生成一个 Go 编译的启动器。目标机器运行时不需要安装 Go，只需要运行打包后的启动器。
 
 项目同时提供本地 Web UI，适合不想直接改 Java 测试代码的新手用户通过表单完成加密打包和 license 生成。
+
+生成的原生可执行文件是 Go 启动器，内嵌加密 JAR 和指定 JDK；业务应用仍在 JVM 中运行，不会被转换为 Native Image。
+
+## 支持范围
+
+| 应用类型 | 支持方式与验证范围 |
+| --- | --- |
+| Spring Boot | 保留已有 Boot 3.4.2 适配，本次归档加解密回归通过 |
+| Solon | 自动识别默认 `solon-maven-plugin repackage` 嵌套 JAR；Solon 4.1.0 + JDK 25.0.2 已完成 Windows x64 实际分发验证 |
+| 普通可执行 JAR | 使用普通 JAR 解密类加载器，本次归档加解密回归通过 |
+
+工具构建使用 JDK 21；分发的 JDK 必须满足业务应用的 Java 版本要求。Go 提供 Windows、Linux、macOS 的 amd64/arm64 编译选项，各目标的运行情况需分别验证。
+
+### 当前授权行为与已知限制
+
+- `key.x` 缺失、无法解密或应用编码不匹配时，启动器回退到打包时的内置有效期；并非强制拒绝运行。
+- 有效 license 已过期时，不启动业务应用或停止正在运行的业务应用，授权状态接口继续提供服务。更换 license 后需重启启动器生效。
+- **运行中到期存在停止延迟**：当前实现在解压 JDK 前计算剩余时间，在解压后才启动倒计时。Windows 实测延迟约 3.2 秒，具体取决于运行环境准备耗时；此问题尚未修复。
+- 授权依赖宿主机时间，不能防止通过修改系统时间绕过期限。JAR 加密也不能保证运行时明文永远无法被提取。
 
 ## 适合解决什么问题
 
@@ -20,7 +39,7 @@ xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，当前�
 1. JDK 21。
 2. Maven。
 3. Go 环境，用于编译启动器。
-4. 需要被加密的原始 Jar，例如一个已经 `mvn package` 出来的 Spring Boot Jar。
+4. 需要被加密的原始 Jar，例如已经 `mvn package` 出来的 Spring Boot 或 Solon 可执行 Jar。
 5. 一个目标运行环境对应的 JDK zip 包。
 
 注意：JDK zip 包必须直接包含 JDK 根目录内容，不能多套一层目录。正确结构类似下面这样：
@@ -110,6 +129,54 @@ public class MyTest {
     }
 }
 ```
+
+## Solon 项目
+
+支持 `solon-maven-plugin` 默认 `repackage` 产物：入口为 `org.noear.solon.loader.JarLauncher`，业务文件位于 `BOOT-INF/classes/`，依赖位于 `BOOT-INF/lib/`。
+API 和 Web UI 都自动识别该格式，无需切换加密模式或修改业务项目。保留原包的 Solon loader，使用解密类加载器在内存中读取加密内容，内部依赖保持不压缩存储。
+
+过滤路径相对于业务类路径填写，**不要添加 `BOOT-INF/classes/` 前缀**：
+
+```java
+.include("com/example/demo/**")
+.include("app.yml")
+.include("templates/**")
+.exclude("static/**")
+```
+
+依赖包内的条目也使用相对于该依赖 JAR 根目录的路径匹配。首次使用可以只加密业务包，再扩大资源范围。解密还原时需传入与加密时相同的过滤规则。
+随 Go 启动器分发的 JDK 必须满足业务项目要求，例如 demo 编译目标为 Java 25，就应使用 JDK 25 的 zip。
+此支持范围是默认 JVM 可执行 JAR；不包含 Solon WAR、自定义 Launcher 或 Native Image。
+
+回归验证：
+
+```powershell
+mvn test -Dtest=verification.ArchiveRoutingTest
+```
+
+真实 Solon 4.1.0 demo 验证（业务包为 `com.example.demo`，提供 `/hello`、`/hello2` 和 `/base.css`；路径按本机环境替换）：
+
+```powershell
+mvn package -DskipTests
+New-Item -ItemType Directory -Force target/solon-verification
+& 'C:/Java/jdk-25/bin/java.exe' -cp target/xjar-plus-1.0.jar `
+  src/test/java/verification/SolonEncryptionCheck.java `
+  C:/work/solon-demo/target/demo.jar `
+  target/solon-verification
+```
+
+验证程序在独立临时子目录生成加密包和日志，比较原包、加密包、解密还原包的 HTTP 响应，并检查实际密文、嵌套依赖存储方式和错误密码拒绝启动。使用一次性的验证密码，生成的包仅用于测试。测试结束会停止本次启动的进程。
+
+完整 Windows 分发验证可运行 `src/test/java/verification/SolonLauncherCheck.java`，使用相同的 `java -cp target/xjar-plus-1.0.jar` 源文件运行方式，依次传入四个参数：demo JAR、Windows JDK 25 zip、Go bin 目录、已存在的输出父目录。它会执行 `.ok()`、全量加密、编译 Go 启动器，并仅复制 `main.exe` 和 `key.x` 到中文及含空格的分发目录；测试子进程的 PATH 不包含 Java/Go，TEMP/TMP 限定在独立测试目录。
+
+```powershell
+& 'C:/Java/jdk-25/bin/java.exe' -cp target/xjar-plus-1.0.jar `
+  src/test/java/verification/SolonLauncherCheck.java `
+  C:/work/solon-demo/target/demo.jar C:/Java/jdk-25-windows-x64.zip `
+  C:/Go/bin target/solon-verification
+```
+
+该测试覆盖正常启动、license 参数覆盖、缺失/错误 license、启动时过期、尚未生效、运行中到期及续期重启。注意：当前启动器对缺失或不可用的 license 会回退到内置有效期，这与直接运行加密 JAR 时拒绝错误解密密码是两个不同层面的行为。测试会输出运行中到期的实际停止延迟，测试产物和日志会保留供检查。
 
 ## 可视化 UI 使用方式
 

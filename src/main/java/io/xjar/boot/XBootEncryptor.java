@@ -21,7 +21,7 @@ import java.util.zip.CheckedOutputStream;
 import java.util.zip.Deflater;
 
 /**
- * Spring-Boot JAR包加密器
+ * BOOT-INF 嵌套 JAR 加密器，复用 Spring Boot 与 Solon 默认 JAR 的存储结构。
  *
  * @author Payne 646742615@qq.com
  * 2018/11/22 15:27
@@ -38,6 +38,8 @@ public class XBootEncryptor extends XEntryEncryptor<JarArchiveEntry> implements 
         map.put(warLauncher, "io.xjar.boot.XWarLauncher");
         map.put(extLauncher, "io.xjar.boot.XExtLauncher");
         map.put(extLauncher4V3, "io.xjar.boot.XExtLauncher");
+        // Solon shares the archive layout, but its runtime must retain Solon's own nested URL protocol.
+        map.put("org.noear.solon.loader.JarLauncher", "io.xjar.solon.XSolonLauncher");
 
     }
 

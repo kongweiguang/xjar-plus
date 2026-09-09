@@ -29,13 +29,15 @@ public class XSmartEncryptor extends XEntryEncryptor<JarArchiveEntry> implements
         super(xEncryptor, filter);
     }
 
+    /** Solon shares BOOT-INF storage with Boot but identifies its launcher without Spring-Boot-Version. */
     @Override
     public void encrypt(XKey key, File src, File dest) throws IOException {
         try (JarFile jar = new JarFile(src, false)) {
             Manifest manifest = jar.getManifest();
             Attributes attributes = manifest.getMainAttributes();
             String version = attributes.getValue("Spring-Boot-Version");
-            XEncryptor encryptor = version != null ? new XBootEncryptor(xEncryptor, filter) : new XJarEncryptor(xEncryptor, filter);
+            boolean nested = version != null || "org.noear.solon.loader.JarLauncher".equals(attributes.getValue("Main-Class"));
+            XEncryptor encryptor = nested ? new XBootEncryptor(xEncryptor, filter) : new XJarEncryptor(xEncryptor, filter);
             encryptor.encrypt(key, src, dest);
         }
     }

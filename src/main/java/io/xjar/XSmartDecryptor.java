@@ -29,13 +29,15 @@ public class XSmartDecryptor extends XEntryDecryptor<JarArchiveEntry> implements
         super(xDecryptor, filter);
     }
 
+    /** Route the encrypted Solon launcher through the same nested-archive layout used during encryption. */
     @Override
     public void decrypt(XKey key, File src, File dest) throws IOException {
         try (JarFile jar = new JarFile(src, false)) {
             Manifest manifest = jar.getManifest();
             Attributes attributes = manifest.getMainAttributes();
             String version = attributes.getValue("Spring-Boot-Version");
-            XDecryptor decryptor = version != null ? new XBootDecryptor(xDecryptor, filter) : new XJarDecryptor(xDecryptor, filter);
+            boolean nested = version != null || "io.xjar.solon.XSolonLauncher".equals(attributes.getValue("Main-Class"));
+            XDecryptor decryptor = nested ? new XBootDecryptor(xDecryptor, filter) : new XJarDecryptor(xDecryptor, filter);
             decryptor.decrypt(key, src, dest);
         }
     }
