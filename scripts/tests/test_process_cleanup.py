@@ -1,5 +1,5 @@
 # @author kongweiguang
-"""固定 Darwin 僵尸组竞态，并确认及时回收根进程不会漏掉仍存活的后代。"""
+"""固定 Darwin 退出中态和僵尸组竞态，并确认及时回收根进程不会漏掉仍存活的后代。"""
 
 from contextlib import contextmanager
 import errno
@@ -85,32 +85,35 @@ class ProcessGroupCleanupTests(unittest.TestCase):
         sleep.assert_called_once_with(0.05)
 
     def test_persistent_permission_denial_is_not_success(self):
-        """父进程已退出也不能将持续权限拒绝误判为整个进程组消失。"""
-        process = Mock(pid=1234)
-        process.poll.return_value = 0
-        denied = PermissionError(errno.EPERM, "real permission denial")
-        killpg = Mock(side_effect=denied)
-        with patch.object(common, "os", SimpleNamespace(killpg=killpg)), \
-                patch.object(common.time, "monotonic", side_effect=[0, 0.1]), \
-                patch.object(common.time, "sleep") as sleep:
-            with self.assertRaises(PermissionError) as failure:
-                common._signal_process_group(process, 0, 0.1)
-        self.assertIs(denied, failure.exception)
-        self.assertEqual(4, killpg.call_count)
-        sleep.assert_called_once_with(0.05)
+        """父进程可否回收都不影响权限边界：同一期限耗尽后必须保留原始拒绝。"""
+        for poll_result in (None, 0):
+            with self.subTest(poll_result=poll_result):
+                process = Mock(pid=1234)
+                process.poll.return_value = poll_result
+                denied = PermissionError(errno.EPERM, "real permission denial")
+                killpg = Mock(side_effect=denied)
+                with patch.object(common, "os", SimpleNamespace(killpg=killpg)), \
+                        patch.object(common.time, "monotonic", side_effect=[0, 0.1]), \
+                        patch.object(common.time, "sleep") as sleep:
+                    with self.assertRaises(PermissionError) as failure:
+                        common._signal_process_group(process, 0, 0.1)
+                self.assertIs(denied, failure.exception)
+                self.assertEqual(4, killpg.call_count)
+                sleep.assert_called_once_with(0.05)
 
-    def test_live_root_permission_denial_fails_immediately(self):
-        """根进程尚活时没有僵尸退出证据，不能掩盖真实权限错误。"""
+    def test_retries_exiting_root_before_waitpid_can_reap(self):
+        """退出清理可能跨多轮 poll；连续 None 和 EPERM 仍须等明确 ESRCH 或原截止时间。"""
         process = Mock(pid=1234)
-        process.poll.return_value = None
-        denied = PermissionError(errno.EPERM, "real permission denial")
-        killpg = Mock(side_effect=denied)
-        with patch.object(common, "os", SimpleNamespace(killpg=killpg)), patch.object(common.time, "sleep") as sleep:
-            with self.assertRaises(PermissionError) as failure:
-                common._signal_process_group(process, 15, 2)
-        self.assertIs(denied, failure.exception)
-        killpg.assert_called_once_with(1234, 15)
-        sleep.assert_not_called()
+        process.poll.side_effect = [None, None, None, None, 0]
+        denied = PermissionError(errno.EPERM, "exit not yet waitable")
+        killpg = Mock(side_effect=[denied] * 4 + [ProcessLookupError(errno.ESRCH, "group gone")])
+        with patch.object(common, "os", SimpleNamespace(killpg=killpg)), \
+                patch.object(common.time, "monotonic", side_effect=[0, 0.05]), \
+                patch.object(common.time, "sleep") as sleep:
+            self.assertFalse(common._signal_process_group(process, 0, 0.2))
+        self.assertEqual(5, process.poll.call_count)
+        self.assertEqual(5, killpg.call_count)
+        self.assertEqual([(0.05,), (0.05,)], [call.args for call in sleep.call_args_list])
 
     def test_exited_root_does_not_skip_force_killing_remaining_group(self):
         """根已被回收仍须在宽限耗尽后向同一组发 KILL，不以 poll 的退出码提前成功。"""

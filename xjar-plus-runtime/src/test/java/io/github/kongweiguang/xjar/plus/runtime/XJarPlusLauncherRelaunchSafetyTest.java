@@ -36,6 +36,7 @@ class XJarPlusLauncherRelaunchSafetyTest {
     private static List<String> echoCommand() {
         final List<String> command = new ArrayList<String>();
         command.add(Paths.get(System.getProperty("java.home"), "bin", "java.exe").toString());
+        command.add("-Dstdout.encoding=windows-1252");
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
         command.add(ProcessArgumentEcho.class.getName());
@@ -52,9 +53,20 @@ class XJarPlusLauncherRelaunchSafetyTest {
     }
 
     /**
+     * 将 argv 编码为可读的 ASCII 诊断，避免 CI 日志把不同 Unicode 值都显示成问号。
+     */
+    private static List<String> diagnosticArguments(List<String> arguments) {
+        final List<String> encoded = new ArrayList<String>();
+        for (String argument : arguments) {
+            encoded.add(Base64.getEncoder().encodeToString(argument.getBytes(StandardCharsets.UTF_8)));
+        }
+        return encoded;
+    }
+
+    /**
      * 只读取子进程的 Base64 记录，避免平台控制台编码掩盖 argv 损坏。
      */
-    private static List<String> readArguments(Process child) throws IOException {
+    private static List<String> readArgumentEncodings(Process child) throws IOException {
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         final byte[] buffer = new byte[1024];
         try (InputStream input = child.getInputStream()) {
@@ -68,8 +80,7 @@ class XJarPlusLauncherRelaunchSafetyTest {
         final List<String> arguments = new ArrayList<String>();
         for (String line : new String(bytes.toByteArray(), StandardCharsets.US_ASCII).split("\\R")) {
             if (line.startsWith(ProcessArgumentEcho.ARGUMENT_PREFIX)) {
-                final String encoded = line.substring(ProcessArgumentEcho.ARGUMENT_PREFIX.length());
-                arguments.add(new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8));
+                arguments.add(line.substring(ProcessArgumentEcho.ARGUMENT_PREFIX.length()));
             }
         }
         return arguments;
@@ -143,7 +154,9 @@ class XJarPlusLauncherRelaunchSafetyTest {
             final Process child = XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand()));
             assertEquals("true", System.getProperty(WINDOWS_ARGV_PROPERTY));
             assertEquals(0, child.waitFor());
-            assertEquals(argumentVector(), readArguments(child));
+            final List<String> expected = diagnosticArguments(argumentVector());
+            final List<String> actual = readArgumentEncodings(child);
+            assertEquals(expected, actual, () -> "UTF-8/Base64 argv expected=" + expected + " actual=" + actual);
         } finally {
             restoreProperty(original);
         }
@@ -161,7 +174,9 @@ class XJarPlusLauncherRelaunchSafetyTest {
             final Process child = XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand()));
             assertNull(System.getProperty(WINDOWS_ARGV_PROPERTY));
             assertEquals(0, child.waitFor());
-            assertEquals(argumentVector(), readArguments(child));
+            final List<String> expected = diagnosticArguments(argumentVector());
+            final List<String> actual = readArgumentEncodings(child);
+            assertEquals(expected, actual, () -> "UTF-8/Base64 argv expected=" + expected + " actual=" + actual);
         } finally {
             restoreProperty(original);
         }

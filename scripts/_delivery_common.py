@@ -73,7 +73,7 @@ class CommandTimeoutError(RuntimeError):
 
 
 def _signal_process_group(process: subprocess.Popen[str], signum: int, deadline: float) -> bool:
-    """先回收直属僵尸；Darwin 的僵尸组可能暂报 EPERM，但持续权限错误不能当成退出。"""
+    """先回收直属僵尸；Darwin 退出中态也可能暂报 EPERM，但持续权限错误不能当成退出。"""
     while True:
         process.poll()
         try:
@@ -82,9 +82,8 @@ def _signal_process_group(process: subprocess.Popen[str], signum: int, deadline:
         except ProcessLookupError:
             return False
         except PermissionError:
-            if process.poll() is None:
-                raise
-            # 根进程可能恰在 poll 与 killpg 之间退出；回收后立即重查，不能据根退出推断整组退出。
+            process.poll()
+            # Darwin 的退出中态可能已无法接收信号，却尚不可 waitpid 回收；poll 为 None 也须有界重查。
             try:
                 os.killpg(process.pid, signum)
                 return True
