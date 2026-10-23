@@ -69,9 +69,10 @@ func (state *State) SetAppRunning(running bool) {
 	state.mu.Unlock()
 }
 
-// Snapshot 每次生成最新的时间相关视图，避免仅因没有 HTTP 请求刷新状态就把已过期授权报告为有效。
-func (state *State) Snapshot(now time.Time) Snapshot {
+// Snapshot 在同一读锁内采时并复制状态，避免将到期前时间与停机后状态拼接；clock 只能快速取时，不能回调状态写入。
+func (state *State) Snapshot(clock func() time.Time) Snapshot {
 	state.mu.RLock()
+	now := clock()
 	grant, available, licenseErr, appRunning := state.grant, state.available, state.licenseErr, state.appRunning
 	state.mu.RUnlock()
 	snapshot := Snapshot{
@@ -146,7 +147,7 @@ func startWithListener(state *State, listener net.Listener) *Server {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if err := json.NewEncoder(w).Encode(state.Snapshot(time.Now())); err != nil {
+		if err := json.NewEncoder(w).Encode(state.Snapshot(time.Now)); err != nil {
 			log.Printf("xjar-plus: write status response: %v", err)
 		}
 	})

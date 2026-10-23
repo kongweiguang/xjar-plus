@@ -90,7 +90,7 @@ func TestStopAndMarkNotRunningWaitsForConfirmedExit(t *testing.T) {
 		if !got.Equal(deadline) {
 			t.Fatalf("stop deadline = %s, want %s", got, deadline)
 		}
-		if !state.Snapshot(time.Now()).AppRunning {
+		if !state.Snapshot(time.Now).AppRunning {
 			t.Fatal("status reported the business process stopped before Stop completed")
 		}
 	}}
@@ -101,7 +101,7 @@ func TestStopAndMarkNotRunningWaitsForConfirmedExit(t *testing.T) {
 	if !called {
 		t.Fatal("Stop was not called")
 	}
-	if state.Snapshot(time.Now()).AppRunning {
+	if state.Snapshot(time.Now).AppRunning {
 		t.Fatal("status still reports the business process running after confirmed stop")
 	}
 }
@@ -115,7 +115,7 @@ func TestStopAndMarkNotRunningPreservesStateOnFailure(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	child := observedStopper{err: stopErr, observe: func(time.Time) {
 		called = true
-		if !state.Snapshot(time.Now()).AppRunning {
+		if !state.Snapshot(time.Now).AppRunning {
 			t.Fatal("status reported the process stopped while Stop was still running")
 		}
 	}}
@@ -126,7 +126,7 @@ func TestStopAndMarkNotRunningPreservesStateOnFailure(t *testing.T) {
 	if !called {
 		t.Fatal("Stop was not called")
 	}
-	if !state.Snapshot(time.Now()).AppRunning {
+	if !state.Snapshot(time.Now).AppRunning {
 		t.Fatal("status reported the business process stopped after Stop failed")
 	}
 }

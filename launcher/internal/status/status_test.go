@@ -81,15 +81,56 @@ func TestStatusSeparatesLicenseAndApplicationState(t *testing.T) {
 	state := &State{}
 	state.SetLicense(nil, context.DeadlineExceeded)
 	state.SetAppRunning(false)
-	snapshot := state.Snapshot(time.Now())
+	snapshot := state.Snapshot(time.Now)
 	if snapshot.Available || snapshot.Valid || snapshot.AppRunning || snapshot.Message == "" {
 		t.Fatalf("invalid license snapshot = %+v", snapshot)
 	}
 	grant := license.Grant{AppID: "demo", NotBeforeUnix: time.Now().Add(-time.Minute).Unix(), Perpetual: true}
 	state.SetLicense(&grant, nil)
-	snapshot = state.Snapshot(time.Now())
+	snapshot = state.Snapshot(time.Now)
 	if !snapshot.Available || !snapshot.Valid || snapshot.AppRunning {
 		t.Fatalf("valid-but-stopped snapshot = %+v", snapshot)
+	}
+}
+
+// TestSnapshotSamplesTimeWhileStateIsLocked 不靠调度或睡眠证明采时持有状态锁，同时固定截止前、截止点和停止后的授权边界。
+func TestSnapshotSamplesTimeWhileStateIsLocked(t *testing.T) {
+	expiry := time.Unix(1_900_000_000, 0).UTC()
+	for _, testCase := range []struct {
+		name        string
+		now         time.Time
+		running     bool
+		valid       bool
+		remainingMs int64
+	}{
+		{name: "截止前", now: expiry.Add(-time.Millisecond), running: true, valid: true, remainingMs: 1},
+		{name: "截止瞬间", now: expiry, running: true, valid: false},
+		{name: "停止完成", now: expiry.Add(time.Second), running: false, valid: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			state := &State{}
+			grant := license.Grant{AppID: "demo", NotBeforeUnix: expiry.Add(-time.Minute).Unix(), NotAfterUnix: expiry.Unix()}
+			state.SetLicense(&grant, nil)
+			state.SetAppRunning(testCase.running)
+			clockCalls := 0
+			sampledWithoutLock := false
+			snapshot := state.Snapshot(func() time.Time {
+				clockCalls++
+				if state.mu.TryLock() {
+					sampledWithoutLock = true
+					state.mu.Unlock()
+				}
+				return testCase.now
+			})
+			if clockCalls != 1 || sampledWithoutLock {
+				t.Fatalf("clock calls=%d, sampled without state lock=%t", clockCalls, sampledWithoutLock)
+			}
+			if !snapshot.Available || snapshot.Valid != testCase.valid || snapshot.AppRunning != testCase.running ||
+				snapshot.RemainingMs != testCase.remainingMs || snapshot.ServerTime != testCase.now.Format(time.RFC3339) ||
+				snapshot.ValidEndDate != expiry.Format(time.RFC3339) {
+				t.Fatalf("inconsistent expiry snapshot: %+v", snapshot)
+			}
+		})
 	}
 }
 
