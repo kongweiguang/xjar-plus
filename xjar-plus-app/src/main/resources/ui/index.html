@@ -1,0 +1,198 @@
+<!-- @author kongweiguang -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <meta content="@@SESSION_TOKEN@@" name="xjp-session">
+    <title>XJar Plus 2.0</title>
+    <link href="/app.css" rel="stylesheet">
+    <script defer src="/app.js"></script>
+</head>
+<body>
+<main class="shell">
+    <header class="topbar">
+        <div class="brand-mark">XJ</div>
+        <div class="brand-copy">
+            <div class="eyebrow">LOCAL ARCHIVE WORKBENCH</div>
+            <h1>XJar Plus</h1>
+        </div>
+        <span class="local-pill"><i></i> 仅本机访问</span>
+    </header>
+
+    <section class="intro">
+        <div>
+            <p class="eyebrow">2.0 · AES-256-GCM</p>
+            <h2>保护你的 Java 应用</h2>
+            <p class="intro-copy">选好模式和文件后再开始。所有处理都在本机完成，取消选择不会清空已填写的路径。</p>
+        </div>
+        <div class="intro-note"><span class="note-icon">✓</span><span>密码只用于当前任务<br>不会写入配置文件</span>
+        </div>
+    </section>
+
+    <section class="workspace">
+        <div class="section-head">
+            <div><span class="step">01</span>
+                <h3>选择产物模式</h3></div>
+            <div aria-label="产物模式" class="mode-switch" role="group">
+                <button aria-pressed="true" class="mode-option selected" id="modeStandalone" type="button">独立加密
+                    JAR
+                </button>
+                <button aria-pressed="false" class="mode-option" id="modeLauncher" type="button">Go 授权启动器</button>
+            </div>
+        </div>
+
+        <form id="taskForm" novalidate>
+            <div class="form-grid">
+                <label class="field full">
+                    <span class="field-label">原始 JAR <b>*</b></span>
+                    <span class="input-row"><input autocomplete="off" id="inputPath" name="input"
+                                                   placeholder="例如 C:\项目\target\app.jar"><button class="browse"
+                                                                                                     data-pick="file"
+                                                                                                     data-target="inputPath"
+                                                                                                     type="button">选择文件</button></span>
+                    <span class="field-error" data-error="input"></span>
+                </label>
+
+                <label class="field full">
+                    <span class="field-label"><span id="outputLabel">加密 JAR 输出路径</span> <b>*</b></span>
+                    <span class="input-row"><input autocomplete="off" id="outputPath" name="output"
+                                                   placeholder="填写新文件路径"><button class="browse" data-pick="save"
+                                                                                        data-target="outputPath" id="outputPicker"
+                                                                                        type="button">选择位置</button></span>
+                    <span class="field-error" data-error="output"></span>
+                </label>
+
+                <label class="field full">
+                    <span class="field-label">密码 <b>*</b></span>
+                    <input autocomplete="new-password" id="password" name="password" placeholder="输入加密密码"
+                           type="password">
+                    <span class="field-hint">请妥善保存密码；丢失后无法恢复内容。</span>
+                    <span class="field-error" data-error="password"></span>
+                </label>
+
+                <div class="launcher-fields hidden full" id="launcherFields">
+                    <div class="section-divider"><span class="step">02</span>
+                        <h3>启动器与许可证</h3></div>
+                    <div class="form-grid compact">
+                        <label class="field">
+                            <span class="field-label">稳定 appId <b>*</b></span>
+                            <input autocomplete="off" id="appId" placeholder="例如 com.example.billing">
+                            <span class="field-hint">同一应用后续构建与续期保持一致。</span>
+                            <span class="field-error" data-error="appId"></span>
+                        </label>
+                        <label class="field">
+                            <span class="field-label">发行方凭据文件 <b>*</b></span>
+                            <span class="input-row"><input autocomplete="off" id="issuerFile"
+                                                           placeholder="发行方 .issuer 文件路径"><button class="browse"
+                                                                                                         data-pick="file"
+                                                                                                         data-target="issuerFile"
+                                                                                                         type="button">选择文件</button></span>
+                            <span class="field-error" data-error="issuerFile"></span>
+                        </label>
+                        <label class="field">
+                            <span class="field-label">目标平台 <b>*</b></span>
+                            <select id="target">
+                                <option value="">请选择</option>
+                                <option value="windows-amd64">Windows · x64</option>
+                                <option value="windows-arm64">Windows · ARM64</option>
+                                <option value="linux-amd64">Linux · x64</option>
+                                <option value="linux-arm64">Linux · ARM64</option>
+                                <option value="darwin-amd64">macOS · Intel</option>
+                                <option value="darwin-arm64">macOS · Apple Silicon</option>
+                            </select>
+                            <span class="field-error" data-error="target"></span>
+                        </label>
+                        <details class="advanced-settings full" id="launcherAdvancedSettings">
+                            <summary>高级启动器设置 <span>JDK、有效期和启动参数</span></summary>
+                            <div class="advanced-content">
+                                <div class="form-grid compact">
+                                    <label class="field">
+                                        <span class="field-label">内嵌目标 JDK（可选）</span>
+                                        <span class="input-row"><input autocomplete="off" id="jdkZip"
+                                                                       placeholder="留空则使用目标机器的 Java"><button
+                                                class="browse" data-pick="file" data-target="jdkZip"
+                                                type="button">选择文件</button></span>
+                                    </label>
+                                    <label class="field">
+                                        <span class="field-label">Go 编译器路径（可选）</span>
+                                        <input autocomplete="off" id="goExecutable" placeholder="留空则从 PATH 查找 go">
+                                    </label>
+                                    <label class="field">
+                                        <span class="field-label">许可证生效时间（可选）</span>
+                                        <input id="notBefore" type="datetime-local">
+                                    </label>
+                                    <label class="field">
+                                        <span class="field-label">许可证到期时间（可选）</span>
+                                        <input id="notAfter" type="datetime-local">
+                                        <span class="field-error" data-error="notAfter"></span>
+                                    </label>
+                                    <label class="field">
+                                        <span class="field-label">JVM 参数（每行一个）</span>
+                                        <textarea id="jvmArgs" placeholder="-Xms512m&#10;-Xmx1024m" rows="3"></textarea>
+                                    </label>
+                                    <label class="field">
+                                        <span class="field-label">应用参数（每行一个）</span>
+                                        <textarea id="appArgs" placeholder="--spring.profiles.active=prod"
+                                                  rows="3"></textarea>
+                                    </label>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <details class="advanced-settings full" id="archiveAdvancedSettings">
+                    <summary>高级归档设置 <span>依赖处理和路径规则</span></summary>
+                    <div class="advanced-content">
+                        <div class="form-grid compact">
+                            <label class="field full">
+                                <span class="field-label">依赖处理</span>
+                                <span class="check-card"><input id="encryptDependencies" type="checkbox"><span><strong>同时加密嵌套依赖</strong><small>默认只处理应用自身的 class 和资源。</small></span></span>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">加密路径规则（每行一条，可选）</span>
+                                <textarea id="includes" placeholder="com/example/**&#10;config/*.yml"
+                                          rows="4"></textarea>
+                            </label>
+                            <label class="field">
+                                <span class="field-label">排除路径规则（每行一条，可选）</span>
+                                <textarea id="excludes" placeholder="static/**&#10;META-INF/NOTICE" rows="4"></textarea>
+                            </label>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="form-tools">
+                <div class="config-tools">
+                    <button class="quiet-button" id="exportConfig" type="button">导出配置</button>
+                    <button class="quiet-button" id="importConfig" type="button">导入配置</button>
+                    <input accept="application/json,.json" hidden id="configFile" type="file">
+                    <span>导出模式与非敏感设置；不含密码、发行方凭据路径、JVM/应用参数。会保留本机路径，请确认后再分享。</span>
+                </div>
+                <div class="actions">
+                    <button class="primary-button" id="startButton" type="submit"><span>开始加密</span><span
+                            class="arrow">→</span></button>
+                    <button class="cancel-button hidden" id="cancelButton" type="button">取消任务</button>
+                    <button class="retry-button hidden" id="retryButton" type="button">重试</button>
+                </div>
+            </div>
+        </form>
+
+        <div aria-live="polite" class="job-panel hidden" id="jobPanel">
+            <div class="job-heading">
+                <div><span class="job-stage" id="jobStage">准备中</span>
+                    <p id="jobMessage">正在提交任务</p></div>
+                <span class="job-percent" id="jobPercent">0%</span></div>
+            <div class="progress-track">
+                <progress aria-label="任务进度" class="progress-bar" id="progressBar" max="100" value="0"></progress>
+            </div>
+        </div>
+        <div class="feedback" id="feedback" role="status">填写完成后，点击“开始加密”。</div>
+    </section>
+
+    <footer><span>所有任务通过本机 core 处理</span><span>关闭终端即可停止服务</span></footer>
+</main>
+</body>
+</html>

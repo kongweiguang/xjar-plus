@@ -1,0 +1,44 @@
+{
+  "author": "kongweiguang",
+  "groupId": "io.github.kongweiguang.xjar.plus",
+  "version": "2.0.0",
+  "requiredModules": [
+    "xjar-plus-format",
+    "xjar-plus-runtime",
+    "xjar-plus-runtime-boot-modern",
+    "xjar-plus-core",
+    "xjar-plus-app"
+  ],
+  "moduleDependencies": {
+    "xjar-plus-format": [],
+    "xjar-plus-runtime": [
+      "xjar-plus-format"
+    ],
+    "xjar-plus-runtime-boot-modern": [
+      "xjar-plus-format",
+      "xjar-plus-runtime"
+    ],
+    "xjar-plus-core": [
+      "xjar-plus-format",
+      "xjar-plus-runtime",
+      "xjar-plus-runtime-boot-modern"
+    ],
+    "xjar-plus-app": [
+      "xjar-plus-format",
+      "xjar-plus-runtime",
+      "xjar-plus-runtime-boot-modern",
+      "xjar-plus-core"
+    ]
+  },
+  "dddForbiddenImports": {
+    "domain": [
+      "application",
+      "infrastructure",
+      "interfaces"
+    ],
+    "application": [
+      "infrastructure",
+      "interfaces"
+    ]
+  }
+}

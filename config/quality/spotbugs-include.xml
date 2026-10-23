@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @author kongweiguang -->
+<!-- 只检查当前模块的项目类，不将历史迁移产物当作待分发代码。 -->
+<FindBugsFilter>
+    <Match>
+        <Class name="~io\.github\.kongweiguang\.xjar\.plus\..*"/>
+    </Match>
+</FindBugsFilter>

@@ -8,6 +8,34 @@ dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
 
-# Avoid ignoring Maven wrapper jar file (.jar files are usually ignored)
+# Maven wrapper 属于构建入口，不能随生成的 JAR 一起忽略。
 !/.mvn/wrapper/maven-wrapper.jar
 **/demo/**
+# BEGIN UPDENG
+# @author kongweiguang
+/.agents/
+/.codex/
+/.updeng/
+/AGENTS.md
+.env
+.env.*
+!.env.example
+# END UPDENG
+
+# @author kongweiguang
+# 只纳入可分发的 skill，不暴露本机代理配置。
+!/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/xjar-plus/
+/.codegraph/
+/.idea/
+*.issuer
+key.x
+/dist/
+/launcher/cmd/launcher/payload/app.jar
+/launcher/cmd/launcher/payload/config.json
+/launcher/cmd/launcher/payload/jdk.zip
+__pycache__/
+*.py[cod]

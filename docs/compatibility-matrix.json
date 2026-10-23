@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "matrixUpdatedAt": "2026-10-23T23:54:05+08:00",
+  "status": "verified-windows-amd64-only",
+  "policy": "Each released minor line is pinned to an upstream stable patch. A version is supported only after the real executable-JAR checks pass on its declared JDK; building a fixture alone is not evidence of compatibility.",
+  "verification": {
+    "result": "passed",
+    "verifiedAt": "2026-10-23T23:54:05+08:00",
+    "platform": {
+      "os": "Windows 11",
+      "architecture": "amd64"
+    },
+    "candidate": {
+      "file": "target/verification/jackson-python-20261023/xjar-plus-2.0.0.jar",
+      "sha256": "06ED5A3F965B8CE5615AF2C103CA013039B3E85179FE2283DD79E4EA1D0A5DC8"
+    },
+    "cases": {
+      "total": 24,
+      "passed": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "springBootMinorLines": 16,
+      "springBootLayoutVariants": 1,
+      "solonLines": 2,
+      "plainJarRuntimeMajors": [
+        8,
+        11,
+        17,
+        21,
+        25
+      ]
+    },
+    "javaRuntimes": {
+      "8": "Liberica 1.8.0_452",
+      "11": "Eclipse Temurin 11.0.32.1+1",
+      "17": "Eclipse Temurin 17.0.20.1+1",
+      "21": "Liberica 21.0.7+9-LTS",
+      "25": "Liberica 25.0.2+12-LTS"
+    },
+    "evidence": {
+      "consoleLog": "target/verification/jackson-python-20261023/matrix/console.log",
+      "junitXml": "target/verification/jackson-python-20261023/matrix/reports/TEST-junit-jupiter.xml",
+      "qualityLog": "target/verification/jackson-python-20261023/quality-final.log",
+      "buildResult": "Maven quality BUILD SUCCESS; JUnit Console 24/24 passed; finished 2026-10-23T23:54:05+08:00"
+    },
+    "notRun": [
+      "Linux and macOS",
+      "arm64 targets"
+    ],
+    "knownNativeLimitation": {
+      "frameworkVersions": [
+        "2.1.18.RELEASE",
+        "2.2.13.RELEASE",
+        "2.3.12.RELEASE"
+      ],
+      "shortResourceMultipart": "For /asset.txt (20 bytes) and /block16.bin (16 bytes), the original framework responds 206 with Content-Length equal to the selected resource length, then closes after the initial CRLF plus a prefix of the randomized multipart boundary. The test verifies the exact baseline/protected/restored response shape and does not call this a complete multipart response.",
+      "largeResourceMultipart": "For /large.bin (131089 bytes), the original framework also incorrectly declares Content-Length=131089 while closing after a much smaller complete MIME body; strict HTTP clients reject the length mismatch. A bounded close-delimited reader checks baseline/protected/restored declaration parity, the full two-part body, exact Content-Range values and bytes, and closing boundary. This preserves the native limitation rather than claiming correct HTTP framing."
+    }
+  },
+  "springBoot": [
+    {
+      "line": "2.0",
+      "version": "2.0.9.RELEASE",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.0.9.RELEASE"
+    },
+    {
+      "line": "2.1",
+      "version": "2.1.18.RELEASE",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.1.18.RELEASE"
+    },
+    {
+      "line": "2.2",
+      "version": "2.2.13.RELEASE",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.2.13.RELEASE"
+    },
+    {
+      "line": "2.3",
+      "version": "2.3.12.RELEASE",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.3.12.RELEASE"
+    },
+    {
+      "line": "2.4",
+      "version": "2.4.13",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.4.13"
+    },
+    {
+      "line": "2.5",
+      "version": "2.5.15",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.5.15"
+    },
+    {
+      "line": "2.6",
+      "version": "2.6.15",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.6.15"
+    },
+    {
+      "line": "2.7",
+      "version": "2.7.18",
+      "minimumJava": 8,
+      "verificationJava": 8,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v2.7.18"
+    },
+    {
+      "line": "3.0",
+      "version": "3.0.13",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.0.13"
+    },
+    {
+      "line": "3.1",
+      "version": "3.1.12",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "classic",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.1.12"
+    },
+    {
+      "line": "3.2",
+      "version": "3.2.12",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.2.12"
+    },
+    {
+      "line": "3.3",
+      "version": "3.3.13",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.3.13"
+    },
+    {
+      "line": "3.4",
+      "version": "3.4.13",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.4.13"
+    },
+    {
+      "line": "3.5",
+      "version": "3.5.16",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v3.5.16"
+    },
+    {
+      "line": "4.0",
+      "version": "4.0.9",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v4.0.9"
+    },
+    {
+      "line": "4.1",
+      "version": "4.1.2",
+      "minimumJava": 17,
+      "verificationJava": 21,
+      "layout": "modern",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/spring-projects/spring-boot/releases/tag/v4.1.2"
+    }
+  ],
+  "layoutVariants": [
+    {
+      "framework": "springBoot",
+      "version": "3.2.12",
+      "layout": "classic",
+      "loaderImplementation": "CLASSIC",
+      "fixture": "boot-layout-3.2.12-classic.jar",
+      "verificationJava": 21,
+      "scope": "layout-variant-only; does not add a Spring Boot minor support line",
+      "verificationStatus": "passed-windows-amd64"
+    }
+  ],
+  "solon": [
+    {
+      "line": "4.0",
+      "version": "4.0.6",
+      "minimumJava": 8,
+      "verificationJava": 21,
+      "layout": "nested-jar",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/opensolon/solon/releases/tag/v4.0.6"
+    },
+    {
+      "line": "4.1",
+      "version": "4.1.1",
+      "minimumJava": 8,
+      "verificationJava": 21,
+      "layout": "nested-jar",
+      "verificationStatus": "passed-windows-amd64",
+      "source": "https://github.com/opensolon/solon/releases/tag/v4.1.1"
+    }
+  ],
+  "plainJar": [
+    {
+      "name": "plain-java8",
+      "bytecodeTarget": 8,
+      "multiReleaseLevels": [
+        8,
+        9,
+        17
+      ],
+      "verificationJava": [
+        8,
+        11,
+        17,
+        21,
+        25
+      ],
+      "layout": "manifest-main-class",
+      "verificationStatus": "passed-windows-amd64"
+    }
+  ]
+}

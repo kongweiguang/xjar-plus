@@ -1,0 +1,12 @@
+XJar Plus
+Maintained by kongweiguang.
+
+This project originated from the xjar project:
+https://github.com/core-lib/xjar
+Original source authors include Payne (杨昌沛).
+
+XJar Plus 2.0 replaces the original API, archive format and runtime architecture.
+The original Apache License 2.0 text is retained in LICENSE.
+Third-party components retain their own notices and licenses.
+
+@author kongweiguang

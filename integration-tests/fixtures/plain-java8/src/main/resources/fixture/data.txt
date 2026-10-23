@@ -1,0 +1,1 @@
+xjar-plus integration resource — Java 8 fixture

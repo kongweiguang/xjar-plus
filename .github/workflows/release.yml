@@ -1,0 +1,301 @@
+# @author kongweiguang
+name: Release 2.0.0
+
+on:
+  push:
+    tags:
+      - v2.0.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    name: Verify the tagged commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Test Python maintenance scripts
+        run: python -m unittest discover -s scripts/tests -v
+      - name: Confirm the tag resolves to this checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$EXPECTED_SHA"
+      - name: Run shared UI retry regression gate
+        uses: ./.github/actions/ui-retry-test
+      - name: Install Java 8 for baseline applications
+        id: java8
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '8'
+          set-default: false
+      - name: Install Java 11 plain-JAR runtime
+        id: java11
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '11'
+          set-default: false
+      - name: Install Java 17 for Boot modern runtime
+        id: java17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          set-default: false
+      - name: Install Java 25 runtime matrix
+        id: java25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          set-default: false
+      - name: Select Java 21 for the tool build
+        id: java21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: launcher/go.mod
+      - name: Check source policy
+        run: python scripts/check_source.py
+      - name: Check module and DDD dependency directions
+        run: python scripts/check_architecture.py
+      - name: Build Java modules and run release quality gates
+        run: mvn -B -ntp -Pquality -Pintegration verify
+      - name: Run every locked archive compatibility case
+        env:
+          XJP_JAVA8: ${{ steps.java8.outputs.path }}/bin/java
+          XJP_JAVA11: ${{ steps.java11.outputs.path }}/bin/java
+          XJP_JAVA17: ${{ steps.java17.outputs.path }}/bin/java
+          XJP_JAVA21: ${{ steps.java21.outputs.path }}/bin/java
+          XJP_JAVA25: ${{ steps.java25.outputs.path }}/bin/java
+        run: python scripts/verify_compatibility.py --framework all --java8 "$XJP_JAVA8" --java11 "$XJP_JAVA11" --java17 "$XJP_JAVA17" --java21 "$XJP_JAVA21" --java25 "$XJP_JAVA25" --maven-command mvn
+      - name: Run cross-language and broker security probes
+        env:
+          XJP_JAVA8_HOME: ${{ steps.java8.outputs.path }}
+        run: python integration-tests/security/run.py --java8-home "$XJP_JAVA8_HOME"
+      - name: Verify Linux package, licensed business, and bad-license behavior
+        env:
+          XJP_JAVA21: ${{ steps.java21.outputs.path }}/bin/java
+        run: python scripts/verify_launcher.py --target linux-amd64 --java-executable "$XJP_JAVA21" --go-executable go
+
+  cross-build:
+    name: Go cross-build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-amd64
+            suffix: .exe
+          - target: windows-arm64
+            suffix: .exe
+          - target: linux-amd64
+            suffix: ''
+          - target: linux-arm64
+            suffix: ''
+          - target: darwin-amd64
+            suffix: ''
+          - target: darwin-arm64
+            suffix: ''
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: launcher/go.mod
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Build one target without native-execution claims
+        env:
+          OUTPUT_FILE: ${{ runner.temp }}/xjp-${{ matrix.target }}${{ matrix.suffix }}
+        run: python scripts/cross_build.py --target '${{ matrix.target }}' --go-executable go --output "$OUTPUT_FILE"
+
+  native-go-tests:
+    name: Go 1.24 tests and vet (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+    defaults:
+      run:
+        working-directory: launcher
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: launcher/go.mod
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Test Python maintenance and release scripts
+        run: python -m unittest discover -s ../scripts/tests -v
+      - name: Check Go formatting without modifying sources
+        run: python ../scripts/check_go_format.py
+      - run: go test ./...
+      - run: go vet ./...
+
+  build-assets:
+    name: Build public release assets (Go 1.25+ for SBOM)
+    needs: [ gates, cross-build, native-go-tests ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # launcher 使用 Go 1.24 验证；固定版本的 SBOM 工具需要 Go 1.25 或更高版本。
+      # 禁止隐式下载工具链，版本不匹配时由预检给出明确错误。
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: launcher/go.mod
+      - name: Build SDK, CLI, skills, SBOMs, and checksums
+        env:
+          XJP_OUTPUT: ${{ runner.temp }}/release
+        run: python scripts/release.py --version '${{ github.ref_name }}' --output-directory "$XJP_OUTPUT" --maven-command mvn
+      - name: Upload staged assets for release publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: xjar-plus-2.0.0-release-assets
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish and read back Release 2.0.0
+    needs: build-assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Install Java 21 for downloaded CLI artifact verification
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v8
+        with:
+          name: xjar-plus-2.0.0-release-assets
+          path: ${{ runner.temp }}/release
+      - name: Create a draft, upload assets, and verify GitHub readback
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+          RELEASE_DIRECTORY: ${{ runner.temp }}/release
+          READBACK_DIRECTORY: ${{ runner.temp }}/release-readback
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" != 'v2.0.0' ]]; then
+            echo "Unexpected release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          verify_release_tag_sha() {
+            # 有界解析轻量或嵌套 annotated tag，确保发布名始终指向本次已验收的提交。
+            local object_data object_type object_sha depth
+            object_data="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.type + " " + .object.sha')"
+            read -r object_type object_sha <<< "$object_data"
+            for ((depth = 0; depth < 8; depth++)); do
+              if [[ "$object_type" == 'commit' ]]; then
+                if [[ "$object_sha" != "$EXPECTED_SHA" ]]; then
+                  echo "Release tag resolves to $object_sha, expected $EXPECTED_SHA." >&2
+                  return 1
+                fi
+                return 0
+              fi
+              if [[ "$object_type" != 'tag' ]]; then
+                echo "Release tag resolves to unsupported Git object type: $object_type." >&2
+                return 1
+              fi
+              object_data="$(gh api "repos/$GH_REPO/git/tags/$object_sha" --jq '.object.type + " " + .object.sha')"
+              read -r object_type object_sha <<< "$object_data"
+            done
+            echo 'Release tag exceeds the annotated-tag resolution limit.' >&2
+            return 1
+          }
+          verify_release_tag_sha
+          if existing_draft="$(gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$existing_draft" != 'true' ]]; then
+              echo "Refusing to overwrite an already published release." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --repo "$GH_REPO" --title "$RELEASE_TAG" --generate-notes --draft
+          fi
+          (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
+          gh release upload "$RELEASE_TAG" --repo "$GH_REPO" "$RELEASE_DIRECTORY"/* --clobber
+          mkdir -p "$READBACK_DIRECTORY"
+          gh release download "$RELEASE_TAG" --repo "$GH_REPO" --dir "$READBACK_DIRECTORY"
+          (cd "$READBACK_DIRECTORY" && sha256sum -c SHA256SUMS)
+          expected_files="$(printf '%s\n' 'COMPATIBILITY.md' 'SHA256SUMS' 'xjar-plus-2.0.0-compatibility-matrix.json' 'xjar-plus-2.0.0-go.cdx.json' 'xjar-plus-2.0.0-java.cdx.json' 'xjar-plus-2.0.0-sdk.zip' 'xjar-plus-2.0.0-skill.zip' 'xjar-plus-2.0.0.jar' | LC_ALL=C sort)"
+          actual_files="$(find "$READBACK_DIRECTORY" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          if [[ "$actual_files" != "$expected_files" ]]; then
+            echo "Release readback contains an unexpected asset set." >&2
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected_files" "$actual_files" >&2
+            exit 1
+          fi
+          test -s "$READBACK_DIRECTORY/xjar-plus-2.0.0.jar"
+          test -s "$READBACK_DIRECTORY/xjar-plus-2.0.0-compatibility-matrix.json"
+          test -s "$READBACK_DIRECTORY/COMPATIBILITY.md"
+          test -s "$READBACK_DIRECTORY/xjar-plus-2.0.0-sdk.zip"
+          test -s "$READBACK_DIRECTORY/xjar-plus-2.0.0-skill.zip"
+          version_output="$(java -jar "$READBACK_DIRECTORY/xjar-plus-2.0.0.jar" --version 2>&1)"
+          if [[ "$version_output" != *'xjar-plus 2.0.0'* ]]; then
+            echo "Downloaded CLI returned an unexpected --version result: $version_output" >&2
+            exit 1
+          fi
+          help_output="$(java -jar "$READBACK_DIRECTORY/xjar-plus-2.0.0.jar" --help 2>&1)"
+          for command in encrypt package inspect verify decrypt doctor license ui; do
+            if [[ "$help_output" != *"$command"* ]]; then
+              echo "Downloaded CLI --help is missing command '$command'." >&2
+              exit 1
+            fi
+          done
+          verify_release_tag_sha
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --title "$RELEASE_TAG" --draft=false

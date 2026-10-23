@@ -1,0 +1,10 @@
+# @author kongweiguang
+# 固定源码换行，避免 Windows 检出时改成 CRLF 而破坏跨平台 gofmt 门禁。
+* text=auto eol=lf
+
+# 测试资源必须保留原始字节，不能参与 Git 的文本换行转换。
+*.bin -text
+*.png -text
+*.jpg -text
+*.jar -text
+*.zip -text

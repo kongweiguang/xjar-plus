@@ -1,0 +1,1 @@
+xjar-plus integration resource — Spring Boot fixture
