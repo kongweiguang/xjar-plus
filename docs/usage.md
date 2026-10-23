@@ -64,6 +64,8 @@ trim 或做 Unicode 归一化。不要把密码放进 shell 历史、CI 日志�
 
 可执行工具的标准输出和错误输出统一为 UTF-8，脚本采集 JSON 时也应按 UTF-8 解码。Java API 不修改调用方的全局输出流；其日志和编码由宿主程序决定。
 
+Windows 上部分 JDK 的 `java.exe` 会先用系统代码页转换启动参数；英文系统可能在进入 Java 代码前把中文或 emoji 变为 `?`（见 [OpenJDK 21 启动器实现](https://github.com/openjdk/jdk21u/blob/jdk-21.0.12%2B8/src/java.base/share/native/launcher/main.c)）。`-Dfile.encoding=UTF-8` 或修改终端显示编码不能修复这一步。构建时优先用 Web UI / Java API 处理非 ASCII 路径，密码使用 UTF-8 文件；目标应用的复杂文本优先放入其支持的 UTF-8 配置文件，而不是启动参数。Go 启动器最终也调用目标 Java，不绕过该 JDK 限制。请在实际目标系统验证所需字符，不要仅以终端显示正常判断传参正确。
+
 ### 3.1 独立加密、验证、查看和恢复
 
 以下命令不依赖特定 shell；路径带空格时用双引号包围完整参数。
@@ -247,6 +249,8 @@ Java 启动业务 JVM；入口继承标准流、等待业务结束并转交退�
 可能打印自定义系统类加载器影响 CDS 的警告；这是 JVM 提示，不代表认证失败。Go 打包普通 JAR 时会自动加入桥接参数、直接启动单个业务
 JVM。Spring Boot 和 Solon 使用自身适配器，不需要此参数。
 
+Windows 普通 JAR 自动重启前会检查当前 JVM 报告的本机字符集；参数无法无损表示或字符集不可识别时明确拒绝，不让第二次启动静默替换字符。错误提示不回显参数内容。此检查不能恢复首次 `java.exe` 启动时已经丢失的字符，也不支持用 `-Dsun.jnu.encoding` 伪造本机编码；请改用可表示的路径/参数或在匹配字符集的运行环境重试。
+
 Go 启动器模式由启动器监督应用、提供许可证状态，不需要目标应用 stdin 作为供钥通道；业务 stdin/stdout/stderr
 按进程参数继承。许可证状态接口只监听本机，默认端口 `19527`，可通过非秘密环境变量 `XJAR_PLUS_STATUS_PORT` 指定 `0`（系统分配）或
 `1..65535`；地址绑定失败会导致启动失败，而不是假报就绪。
@@ -324,6 +328,8 @@ JAR 五个 JDK、Boot 16 个 minor 的固定补丁、Boot 3.2 CLASSIC 额外布�
 两个版本，零失败、零跳过。验证包括实际业务启动、资源/SPI、HTTP、错误密码和解密恢复；Boot 4.1 还覆盖选中嵌套 Multi-Release
 条目的密文与运行行为。
 
+2026-10-24 的 [Linux 发布前兼容测试](https://github.com/kongweiguang/xjar-plus/actions/runs/39988335391) 在提交 `10dd1a8` 上也通过全部 24 组。JSON 的 `verification` 保留 Windows 本地候选及其哈希，`ciVerification` 单独记录这次 Linux 结果；两者都不是后续版本或最终 tag 的替代证据。
+
 **保留的框架原生限制：** Boot 2.1.18.RELEASE、2.2.13.RELEASE、2.3.12.RELEASE 的 multipart Range 响应把原资源长度写入
 `Content-Length`。16/20 字节资源的 MIME 正文因此只留下边界前缀；131089 字节资源则在完整双段 MIME 结束后关闭连接，正文远小于声明长度，严格
 HTTP 客户端会拒绝。测试分别验证原包、保护包和恢复包的状态、声明长度、精确截断前缀，以及大资源的两个完整分段与结束边界，不把
@@ -332,8 +338,6 @@ HTTP 206 当作完整可用。普通 GET、HEAD、单段 Range 和其他资源�
 Windows Go 启动器已实测内嵌 JDK、无效授权、到期后约 5 秒强停兜底、状态接口继续服务、换证重启、参数/stdin 与临时目录清理。WSL
 Linux 已实测加密和真实 Go 编译中的 SIGTERM 取消。macOS/ARM 实机、系统选择框的高 DPI/焦点交互仍未验收；交叉编译成功不等于这些目标已实际运行。
 
-本地模块的 Checkstyle、PMD、SpotBugs 和分层依赖检查已通过，这些检查只是阿里巴巴规范的可自动化子集，不构成全部规范认证。发布前仍须对最终
-tag 执行质量、兼容性和启动器平台门槛，再核对发布附件 SHA-256 与下载回读结果。
+本地模块的 Checkstyle、PMD、SpotBugs 和分层依赖检查已通过，这些检查只是阿里巴巴规范的可自动化子集，不构成全部规范认证。Release workflow 对最终 tag 执行质量、兼容性和启动器平台门槛，通过后生成附件，并在公开前下载回读、核对 SHA-256 和 CLI 版本。
 
-仓库含发布 workflow 和 `scripts/release.py`，可生成 CLI/UI JAR、SDK ZIP、Skill ZIP、兼容矩阵、SBOM 与校验清单。 **当前未提交、推送或发布
-GitHub Release，也没有自动发布 Maven Central。**
+`scripts/release.py` 只在本地生成 CLI/UI JAR、SDK ZIP、Skill ZIP、兼容矩阵、SBOM 与校验清单，不自行提交、推送或发布。正式附件见 [2.0.0 Release](https://github.com/kongweiguang/xjar-plus/releases/tag/v2.0.0)，最终 tag 的验收结果以 [Release workflow](https://github.com/kongweiguang/xjar-plus/actions/workflows/release.yml) 对应运行记录为准；没有自动发布 Maven Central。

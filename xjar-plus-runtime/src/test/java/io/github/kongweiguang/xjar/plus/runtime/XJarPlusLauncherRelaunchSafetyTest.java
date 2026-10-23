@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -16,11 +17,13 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 保证自动重启诊断信息安全，并拒绝无法透明重复执行的 JVM 副作用。
@@ -33,23 +36,40 @@ class XJarPlusLauncherRelaunchSafetyTest {
     /**
      * 使用当前 JDK 可执行文件，因为测试目标正是该 JDK 的 Windows 命令行解析器。
      */
-    private static List<String> echoCommand() {
+    private static List<String> echoCommand(List<String> arguments) {
         final List<String> command = new ArrayList<String>();
         command.add(Paths.get(System.getProperty("java.home"), "bin", "java.exe").toString());
         command.add("-Dstdout.encoding=windows-1252");
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
         command.add(ProcessArgumentEcho.class.getName());
-        command.addAll(argumentVector());
+        command.addAll(arguments);
         return command;
     }
 
     /**
-     * 覆盖空参数、空白、内嵌引号、反斜杠和 Unicode，且不构造 shell 命令字符串。
+     * 将引号转义与字符集限制分开验证，避免英文 Windows 在 Java 入口之前替换中文而掩盖真实契约。
      */
     private static List<String> argumentVector() {
         return Arrays.asList("", "two words", "quoted\"value", "C:\\dir with spaces\\tail\\",
-                "slash\\\"quote", "中文参数");
+                "slash\\\"quote");
+    }
+
+    /**
+     * 真实启动当前 Java 并逐项比较字节；超时和断言失败均回收进程，避免测试遗留业务 JVM。
+     */
+    private static void assertArgumentRoundTrip(List<String> arguments) throws Exception {
+        final Process child = XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand(arguments)));
+        try {
+            assertTrue(child.waitFor(10, TimeUnit.SECONDS), "Argument probe did not finish within its deadline");
+            assertEquals(0, child.exitValue());
+            final List<String> expected = diagnosticArguments(arguments);
+            final List<String> actual = readArgumentEncodings(child);
+            assertEquals(expected, actual, () -> "UTF-8/Base64 argv expected=" + expected + " actual=" + actual);
+        } finally {
+            child.destroyForcibly();
+            assertTrue(child.waitFor(5, TimeUnit.SECONDS), "Argument probe could not be reaped");
+        }
     }
 
     /**
@@ -151,12 +171,8 @@ class XJarPlusLauncherRelaunchSafetyTest {
         final String original = System.getProperty(WINDOWS_ARGV_PROPERTY);
         try {
             System.setProperty(WINDOWS_ARGV_PROPERTY, "true");
-            final Process child = XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand()));
+            assertArgumentRoundTrip(argumentVector());
             assertEquals("true", System.getProperty(WINDOWS_ARGV_PROPERTY));
-            assertEquals(0, child.waitFor());
-            final List<String> expected = diagnosticArguments(argumentVector());
-            final List<String> actual = readArgumentEncodings(child);
-            assertEquals(expected, actual, () -> "UTF-8/Base64 argv expected=" + expected + " actual=" + actual);
         } finally {
             restoreProperty(original);
         }
@@ -171,14 +187,58 @@ class XJarPlusLauncherRelaunchSafetyTest {
         final String original = System.getProperty(WINDOWS_ARGV_PROPERTY);
         try {
             System.clearProperty(WINDOWS_ARGV_PROPERTY);
-            final Process child = XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand()));
+            assertArgumentRoundTrip(argumentVector());
             assertNull(System.getProperty(WINDOWS_ARGV_PROPERTY));
-            assertEquals(0, child.waitFor());
-            final List<String> expected = diagnosticArguments(argumentVector());
-            final List<String> actual = readArgumentEncodings(child);
-            assertEquals(expected, actual, () -> "UTF-8/Base64 argv expected=" + expected + " actual=" + actual);
         } finally {
             restoreProperty(original);
+        }
+    }
+
+    /**
+     * 中文代码页必须真实传回中文，其他代码页必须明确拒绝；两种环境均有断言，不跳过 Unicode 行为。
+     */
+    @Test
+    void handlesUnicodeAccordingToTheActualWindowsNativeCharset() throws Exception {
+        assumeWindows();
+        final List<String> arguments = Collections.singletonList("中文参数");
+        final Charset nativeCharset = Charset.forName(System.getProperty("sun.jnu.encoding"));
+        final String original = System.getProperty(WINDOWS_ARGV_PROPERTY);
+        try {
+            System.setProperty(WINDOWS_ARGV_PROPERTY, "true");
+            if (nativeCharset.newEncoder().canEncode(arguments.get(0))) {
+                assertArgumentRoundTrip(arguments);
+            } else {
+                final IOException failure = assertThrows(IOException.class,
+                        () -> XJarPlusLauncher.startChildProcess(new ProcessBuilder(echoCommand(arguments))));
+                assertTrue(failure.getMessage().contains("cannot preserve an argument"));
+                assertFalse(failure.getMessage().contains(arguments.get(0)));
+            }
+            assertEquals("true", System.getProperty(WINDOWS_ARGV_PROPERTY));
+        } finally {
+            restoreProperty(original);
+        }
+    }
+
+    /**
+     * 在每个平台固定覆盖英文代码页拒绝、中文与 UTF-8 可用、非法代理项及未知编码，不依赖 CI 区域设置。
+     */
+    @Test
+    void validatesNativeEncodingWithoutLeakingArguments() throws Exception {
+        XJarPlusLauncher.validateWindowsCommandEncoding(argumentVector(), "windows-1252");
+        XJarPlusLauncher.validateWindowsCommandEncoding(Collections.singletonList("中文参数"), "GBK");
+        XJarPlusLauncher.validateWindowsCommandEncoding(Collections.singletonList("中文参数\uD83D\uDD10"), "UTF-8");
+        final IOException unrepresentable = assertThrows(IOException.class,
+                () -> XJarPlusLauncher.validateWindowsCommandEncoding(Collections.singletonList("private-token-中文"), "windows-1252"));
+        assertTrue(unrepresentable.getMessage().contains("cannot preserve an argument"));
+        assertFalse(unrepresentable.getMessage().contains("private-token"));
+        assertThrows(IOException.class,
+                () -> XJarPlusLauncher.validateWindowsCommandEncoding(Collections.singletonList("\uD800"), "UTF-8"));
+        for (String encoding : Arrays.asList(null, "", "private-unknown-charset")) {
+            final IOException unknown = assertThrows(IOException.class,
+                    () -> XJarPlusLauncher.validateWindowsCommandEncoding(argumentVector(), encoding));
+            assertTrue(unknown.getMessage().contains("cannot determine"));
+            assertFalse(unknown.getMessage().contains("private-unknown"));
+            assertNull(unknown.getCause());
         }
     }
 

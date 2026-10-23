@@ -97,11 +97,12 @@ class XJarPlusApplicationTest {
     }
 
     /**
-     * 使用旧式控制台默认值调用真实进程入口，覆盖所有 CLI 输出路径。
+     * 使用真实 JVM 检查 UTF-8 输出；比较真实工作目录以消解 macOS /var 与 /private 等路径别名。
      */
     @Test
     void mainWritesUtf8WhenJvmConsoleDefaultsToGbk(@TempDir Path temporaryDirectory) throws Exception {
         final Path workingDirectory = Files.createDirectory(temporaryDirectory.resolve("包含中文的工作目录"));
+        final String expectedWorkingDirectory = workingDirectory.toRealPath().toString();
 
         final ChildOutput help = runChild(workingDirectory, temporaryDirectory, "--help");
         assertEquals(0, help.exitCode());
@@ -109,7 +110,7 @@ class XJarPlusApplicationTest {
 
         final ChildOutput doctor = runChild(workingDirectory, temporaryDirectory, "doctor");
         assertEquals(0, doctor.exitCode());
-        assertContainsUtf8(doctor.output(), "user.dir=" + workingDirectory.toAbsolutePath());
+        assertContainsUtf8(doctor.output(), "user.dir=" + expectedWorkingDirectory);
 
         final ChildOutput invalid = runChild(workingDirectory, temporaryDirectory, "encrypt", "--unknown-option");
         assertEquals(2, invalid.exitCode());

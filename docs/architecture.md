@@ -141,10 +141,9 @@ AES-GCM 能提供密文完整性与保密性，不保证客户端无法提取运
 
 ## 验收状态
 
-当前兼容清单 [`compatibility-matrix.json`](compatibility-matrix.json) 记录 V2 候选在 Windows 11 amd64 的 24
-项真实归档验收，零失败、零跳过；不是从 V1 历史结果推断。Boot 2.1–2.3 的原生 multipart
+兼容清单 [`compatibility-matrix.json`](compatibility-matrix.json) 分别记录 Windows 11 amd64 本地候选和 Linux 提交 `10dd1a8` 的 24 项真实归档验收，均零失败；不是从 V1 历史结果推断，也不能替代最终 tag 的验证。Boot 2.1–2.3 的原生 multipart
 长度错误以明确的基线一致性断言保留，不宣称这些框架缺陷已经修复。完整边界见使用指南。
 
 Windows Go 启动器已实测无效授权、到期停机、状态服务存活、换证重启、单 JVM、参数/stdin 和私有目录清理；WSL Linux 已实测加密及真实
 Go 编译阶段的 SIGTERM 取消。它们不等于 macOS/ARM 实机验收，也不覆盖原生选择框的高 DPI 与焦点交互。发布工作流包含质量检查、真实归档测试、Go
-多平台构建与 Release 附件哈希回读，但尚未执行此次 GitHub 发布。
+多平台构建与 Release 附件哈希回读；正式发布状态与最终 tag 验收以 [Release](https://github.com/kongweiguang/xjar-plus/releases/tag/v2.0.0) 和对应 [workflow 记录](https://github.com/kongweiguang/xjar-plus/actions/workflows/release.yml) 为准。

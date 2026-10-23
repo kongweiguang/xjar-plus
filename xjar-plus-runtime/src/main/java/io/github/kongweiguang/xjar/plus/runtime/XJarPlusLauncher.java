@@ -13,6 +13,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
 import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
@@ -210,12 +212,13 @@ public final class XJarPlusLauncher {
     }
 
     /**
-     * 仅在创建 bootstrap 子进程时临时启用 JDK 严格的 Windows argv 引号转义。
+     * 先拒绝本机编码无法无损传递的参数，再临时启用严格引号转义，避免重启时静默损坏业务输入。
      */
     static Process startChildProcess(ProcessBuilder builder) throws IOException {
         if (File.separatorChar != '\\') {
             return builder.start();
         }
+        validateWindowsCommandEncoding(builder.command(), System.getProperty("sun.jnu.encoding"));
         final String originalValue = System.getProperty(WINDOWS_ARGV_PROPERTY);
         try {
             System.setProperty(WINDOWS_ARGV_PROPERTY, "false");
@@ -225,6 +228,26 @@ public final class XJarPlusLauncher {
                 System.clearProperty(WINDOWS_ARGV_PROPERTY);
             } else {
                 System.setProperty(WINDOWS_ARGV_PROPERTY, originalValue);
+            }
+        }
+    }
+
+    /**
+     * Windows java.exe 会经本机代码页转换 argv；不以默认 UTF-8 猜测，也不回显可能含秘密的参数或属性值。
+     */
+    static void validateWindowsCommandEncoding(List<String> command, String encoding) throws IOException {
+        final Charset charset;
+        try {
+            charset = Charset.forName(encoding == null ? "" : encoding);
+        } catch (IllegalArgumentException invalidEncoding) {
+            throw new IOException("Automatic protected-JAR restart cannot determine the Windows native character set; "
+                    + "use an unmodified supported JDK and retry");
+        }
+        final CharsetEncoder encoder = charset.newEncoder();
+        for (String argument : command) {
+            if (!encoder.canEncode(argument) || !argument.equals(new String(argument.getBytes(charset), charset))) {
+                throw new IOException("Automatic protected-JAR restart cannot preserve an argument in the Windows native character set; "
+                        + "use representable paths/arguments or a matching Windows runtime; changing file.encoding does not fix this");
             }
         }
     }

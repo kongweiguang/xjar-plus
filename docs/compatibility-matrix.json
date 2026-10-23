@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "matrixUpdatedAt": "2026-10-23T23:54:05+08:00",
-  "status": "verified-windows-amd64-only",
+  "matrixUpdatedAt": "2026-10-24T01:04:29+08:00",
+  "status": "verified-pre-release-windows-and-linux-amd64",
   "policy": "Each released minor line is pinned to an upstream stable patch. A version is supported only after the real executable-JAR checks pass on its declared JDK; building a fixture alone is not evidence of compatibility.",
   "verification": {
     "result": "passed",
@@ -56,6 +56,27 @@
       ],
       "shortResourceMultipart": "For /asset.txt (20 bytes) and /block16.bin (16 bytes), the original framework responds 206 with Content-Length equal to the selected resource length, then closes after the initial CRLF plus a prefix of the randomized multipart boundary. The test verifies the exact baseline/protected/restored response shape and does not call this a complete multipart response.",
       "largeResourceMultipart": "For /large.bin (131089 bytes), the original framework also incorrectly declares Content-Length=131089 while closing after a much smaller complete MIME body; strict HTTP clients reject the length mismatch. A bounded close-delimited reader checks baseline/protected/restored declaration parity, the full two-part body, exact Content-Range values and bytes, and closing boundary. This preserves the native limitation rather than claiming correct HTTP framing."
+    }
+  },
+  "ciVerification": {
+    "scope": "Pre-release commit only; this does not replace the final release tag gates or update the historical Windows candidate hash.",
+    "result": "passed",
+    "verifiedAt": "2026-10-23T16:45:31Z",
+    "commitSha": "10dd1a858bdb3987bc24d97b8063119760aaf4cd",
+    "workflow": "Compatibility",
+    "runId": 39988335391,
+    "url": "https://github.com/kongweiguang/xjar-plus/actions/runs/39988335391",
+    "platform": {
+      "os": "Linux (GitHub Actions ubuntu-latest)",
+      "architecture": "amd64"
+    },
+    "cases": {
+      "total": 24,
+      "passed": 24,
+      "failures": 0,
+      "plain": 5,
+      "springBoot": 17,
+      "solon": 2
     }
   },
   "springBoot": [
