@@ -1,6 +1,6 @@
 # xjar-plus
 
-xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，支持 Spring Boot 3.4.2、普通可执行 JAR，以及 Solon 默认嵌套 JAR（已验证 Solon 4.1.0 + JDK 25）。工具本身使用 JDK 21 构建。它可以把原始 Jar
+xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，支持 Spring Boot 3.4.2、4.0.9、4.1.2 的默认可执行 JAR、普通可执行 JAR，以及 Solon 默认嵌套 JAR（已验证 Solon 4.1.0 + JDK 25）。工具本身使用 JDK 21 构建。它可以把原始 Jar
 中指定路径的 class 或资源加密，并生成一个 Go 编译的启动器。目标机器运行时不需要安装 Go，只需要运行打包后的启动器。
 
 项目同时提供本地 Web UI，适合不想直接改 Java 测试代码的新手用户通过表单完成加密打包和 license 生成。
@@ -11,7 +11,7 @@ xjar-plus 是基于 xjar 修改的 Jar 加密和启动器打包工具，支持 S
 
 | 应用类型 | 支持方式与验证范围 |
 | --- | --- |
-| Spring Boot | 保留已有 Boot 3.4.2 适配，本次归档加解密回归通过 |
+| Spring Boot | 默认 `JarLauncher` 可执行 JAR；4.0.9、4.1.2 已验证全资源加密、HTTP 静态资源和 Windows x64 分发；保留 3.4.2 适配 |
 | Solon | 自动识别默认 `solon-maven-plugin repackage` 嵌套 JAR；Solon 4.1.0 + JDK 25.0.2 已完成 Windows x64 实际分发验证 |
 | 普通可执行 JAR | 使用普通 JAR 解密类加载器，本次归档加解密回归通过 |
 
@@ -129,6 +129,16 @@ public class MyTest {
     }
 }
 ```
+
+## Spring Boot 项目
+
+使用 Spring Boot 默认 `repackage` 生成的可执行 JAR，过滤路径相对于业务类路径填写，不添加 `BOOT-INF/classes/` 前缀。需要加密所有业务类、配置、静态文件及依赖内容时可使用 `.include("**")`，静态文件无需排除。
+
+已修复加密静态资源的明文长度、CRC 元信息、解密流偏移读取及多版本依赖条目识别问题。Spring Boot 4.0.9、4.1.2 均通过 JDK 21 和 25 的真实 HTTP 验证，覆盖 GET、HEAD、前缀/后缀及多段 Range、416、304 和并发读取；两版均通过携带 JDK 21 的 Windows x64 Go 启动器验证。
+
+已有加密 JAR 和启动器内嵌了旧的解密代码，需使用本次构建的工具重新生成才能获得修复。首次读取某个连接的资源长度时需要完整解密扫描一次，只缓存长度和 CRC，额外缓冲最多 8 KiB，不缓存整份明文。
+
+本次验证范围是默认 JVM 可执行 JAR，不包含 WAR、自定义 Launcher、`PropertiesLauncher` 或 Native Image。可复现的测试命令、具体版本与结果见 [Spring Boot 4 验证记录](docs/spring-boot-4-verification.md)。
 
 ## Solon 项目
 

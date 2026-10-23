@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 /**
  * 加密的URL处理器
@@ -38,13 +40,42 @@ public class XBootURLHandler extends Handler {
         return index.containsEntry(name);
     }
 
+    /** Resolve logical MR entries separately so callers can still configure the returned response connection before reading. */
     @Override
     protected URLConnection openConnection(URL url) throws IOException {
         URLConnection urlConnection = super.openConnection(url);
-        return isEncrypted(url)
-               && urlConnection instanceof JarURLConnection
-                ? new XBootURLConnection((JarURLConnection) urlConnection, xDecryptor, xEncryptor, xKey)
-                : urlConnection;
+        if (urlConnection instanceof JarURLConnection) {
+            JarURLConnection jarConnection = (JarURLConnection) urlConnection;
+            boolean encrypted = isSelectedEntryEncrypted(url, jarConnection);
+            JarURLConnection response = (JarURLConnection) super.openConnection(url);
+            if (encrypted) {
+                return new XBootURLConnection(response, xDecryptor, xEncryptor, xKey);
+            }
+            return response;
+        }
+        return urlConnection;
+    }
+
+    /**
+     * Preserve the selected archive's URL when looking up its physical entry, preventing same-name entries in other
+     * dependencies from changing this decision. The archive URL already preserves URL escaping; the index stores entry
+     * names verbatim, so the reconstructed URL is used only for identity comparison and never to open the entry again.
+     * Only uncached selection archives belong to this temporary lookup; cached archives remain owned by Boot.
+     */
+    private boolean isSelectedEntryEncrypted(URL url, JarURLConnection connection) throws IOException {
+        JarFile archive = connection.getJarFile();
+        try {
+            JarEntry entry = connection.getJarEntry();
+            if (entry == null) {
+                return false;
+            }
+            URL physicalEntry = new URL(url, "jar:" + connection.getJarFileURL().toExternalForm() + "!/" + entry.getRealName());
+            return index.containsUrl(physicalEntry);
+        } finally {
+            if (!connection.getUseCaches()) {
+                archive.close();
+            }
+        }
     }
 
 }

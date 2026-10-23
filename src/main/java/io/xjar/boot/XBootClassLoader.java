@@ -37,11 +37,12 @@ public class XBootClassLoader extends LaunchedClassLoader {
         this.xBootURLHandler = new XBootURLHandler(xDecryptor, xEncryptor, xKey, this);
     }
 
+    /** Only archived entries use the decrypting JAR handler; exploded classpaths must retain their file protocol handler. */
     @Override
     public URL findResource(String name) {
         URL url = super.findResource(name);
-        if (url == null) {
-            return null;
+        if (url == null || !"jar".equalsIgnoreCase(url.getProtocol())) {
+            return url;
         }
         try {
             return new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile(), xBootURLHandler);
@@ -59,28 +60,31 @@ public class XBootClassLoader extends LaunchedClassLoader {
         return new XBootEnumeration(enumeration);
     }
 
+    /** Resolve the runtime's selected entry before checking encryption; multi-release classes may have no base entry. */
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         String path = name.replace('.', '/').concat(".class");
-        if (!xBootURLHandler.isEncrypted(path)) {
-            return super.findClass(name);
-        }
         URL url = findResource(path);
-        if (xBootURLHandler.isEncrypted(url)) {
+        if (url != null) {
             try {
-                byte[] bytes = read(url);
+                URLConnection connection = url.openConnection();
+                if (!(connection instanceof XBootURLConnection)) {
+                    return super.findClass(name);
+                }
+                byte[] bytes = read(connection);
                 definePackageIfNecessary(name, url);
                 CodeSource codeSource = new CodeSource(url, (CodeSigner[]) null);
                 return defineClass(name, bytes, 0, bytes.length, codeSource);
-            } catch (Throwable t) {
-                throw new ClassNotFoundException(name, t);
+            } catch (IOException failure) {
+                throw new ClassNotFoundException(name, failure);
             }
         }
         return super.findClass(name);
     }
 
-    private byte[] read(URL url) throws IOException {
-        try (InputStream in = url.openStream()) {
+    /** Read from the already classified connection so selection and decryption cannot take different resource paths. */
+    private byte[] read(URLConnection connection) throws IOException {
+        try (InputStream in = connection.getInputStream()) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             XKit.transfer(in, bos);
             return bos.toByteArray();
@@ -123,11 +127,12 @@ public class XBootClassLoader extends LaunchedClassLoader {
             return enumeration.hasMoreElements();
         }
 
+        /** Enumeration must preserve the same archive-only wrapping as single-resource lookup, including mixed classpaths. */
         @Override
         public URL nextElement() {
             URL url = enumeration.nextElement();
-            if (url == null) {
-                return null;
+            if (url == null || !"jar".equalsIgnoreCase(url.getProtocol())) {
+                return url;
             }
             try {
                 return new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile(), xBootURLHandler);
