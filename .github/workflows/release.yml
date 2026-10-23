@@ -266,7 +266,7 @@ jobs:
               exit 1
             fi
           else
-            gh release create "$RELEASE_TAG" --repo "$GH_REPO" --title "$RELEASE_TAG" --generate-notes --draft
+            gh release create "$RELEASE_TAG" --repo "$GH_REPO" --title "$RELEASE_TAG" --generate-notes --verify-tag --draft
           fi
           (cd "$RELEASE_DIRECTORY" && sha256sum -c SHA256SUMS)
           gh release upload "$RELEASE_TAG" --repo "$GH_REPO" "$RELEASE_DIRECTORY"/* --clobber

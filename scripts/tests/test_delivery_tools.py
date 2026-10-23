@@ -27,6 +27,22 @@ from _delivery_common import CommandTimeoutError, command_argv, run_checked, run
 class CompatibilityScriptTests(unittest.TestCase):
     """覆盖兼容性矩阵筛选、Java 版本识别和临时 POM 改写。"""
 
+    def assert_default_maven_namespace(self, pom: Path) -> str:
+        """确认临时 POM 使用默认 Maven 命名空间并保留 XSI schema 与 XML 声明。"""
+        serialized = pom.read_text(encoding="utf-8")
+        declaration = serialized.splitlines()[0]
+        self.assertTrue(declaration.startswith("<?xml version="))
+        self.assertIn("encoding=", declaration)
+        self.assertTrue(declaration.endswith("?>"))
+        root_element = serialized.splitlines()[1].lstrip()
+        self.assertTrue(root_element.startswith("<project "))
+        self.assertIn('xmlns="http://maven.apache.org/POM/4.0.0"', serialized)
+        self.assertIn('xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"', serialized)
+        self.assertIn("xsi:schemaLocation=", serialized)
+        self.assertIn("<modelVersion>4.0.0</modelVersion>", serialized)
+        self.assertNotIn("ns0:", serialized)
+        return serialized
+
     def test_selects_only_requested_boot_line_and_matching_layout(self):
         """只选择指定 Boot minor，并保留同版本布局变体，不误带其它 fixture。"""
         matrix = {
@@ -45,8 +61,12 @@ class CompatibilityScriptTests(unittest.TestCase):
             verify_compatibility.select_matrix_entries({"springBoot": []}, "plain", "3.2.12")
 
     def test_pins_only_the_named_parent_version(self):
-        """临时 POM 只改 parent 版本，项目自身版本和原始 fixture 均保持不变。"""
-        source = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+        """临时 POM 只改 parent 版本并保持 Maven 可识别的默认命名空间。"""
+        source = '''<?xml version="1.0" encoding="UTF-8"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+          <modelVersion>4.0.0</modelVersion>
           <parent><groupId>org.example</groupId><artifactId>framework-parent</artifactId><version>1.0</version></parent>
           <artifactId>fixture</artifactId><version>2.0</version>
         </project>'''
@@ -55,6 +75,7 @@ class CompatibilityScriptTests(unittest.TestCase):
             pom.write_text(source, encoding="utf-8")
             generated = verify_compatibility.pin_parent_version(pom, "framework-parent", "3.2.12")
             try:
+                self.assert_default_maven_namespace(generated)
                 tree = verify_compatibility.safe_parse_xml(generated)
                 namespace = "{http://maven.apache.org/POM/4.0.0}"
                 self.assertEqual("3.2.12", tree.getroot().findtext(f"{namespace}parent/{namespace}version"))
@@ -64,8 +85,12 @@ class CompatibilityScriptTests(unittest.TestCase):
                 generated.unlink(missing_ok=True)
 
     def test_configures_loader_only_in_transient_pom(self):
-        """CLASSIC 變體寫入指定插件配置，不會要求生產 fixture 改版。"""
-        source = '''<project xmlns="http://maven.apache.org/POM/4.0.0">
+        """CLASSIC 变体写回仍保留默认 Maven 命名空间，不修改仓库生产 fixture。"""
+        source = '''<?xml version="1.0" encoding="UTF-8"?>
+        <project xmlns="http://maven.apache.org/POM/4.0.0"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+          <modelVersion>4.0.0</modelVersion>
           <build><plugins><plugin><groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
         </project>'''
@@ -73,6 +98,7 @@ class CompatibilityScriptTests(unittest.TestCase):
             pom = Path(directory) / "pom.xml"
             pom.write_text(source, encoding="utf-8")
             verify_compatibility.configure_boot_loader(pom, "CLASSIC")
+            self.assert_default_maven_namespace(pom)
             tree = verify_compatibility.safe_parse_xml(pom)
             namespace = "{http://maven.apache.org/POM/4.0.0}"
             self.assertEqual(
@@ -88,7 +114,7 @@ class CompatibilityScriptTests(unittest.TestCase):
         self.assertEqual("21", verify_compatibility.JAVA_VERSION.search('openjdk version "21.0.7"').group(1))
 
     def test_java_version_probe_uses_a_bounded_process(self):
-        """JDK 版本探测必须限制等待时间，避免坏安装或挂起启动器卡住兼容流程。"""
+        """JDK 探测使用规范化路径并限制等待时间，兼容临时目录别名且避免流程挂起。"""
         with tempfile.TemporaryDirectory() as directory:
             java = Path(directory) / "bin" / "java.exe"
             java.parent.mkdir()
@@ -96,9 +122,12 @@ class CompatibilityScriptTests(unittest.TestCase):
             completed = subprocess.CompletedProcess([str(java), "-version"], 0, 'openjdk version "21.0.7"', None)
             with patch.object(verify_compatibility, "run_process", return_value=completed) as runner:
                 executable, home = verify_compatibility.resolve_java(str(java), 21)
-            self.assertEqual(str(java.resolve()), executable)
+            resolved_java = java.resolve()
+            self.assertEqual(str(resolved_java), executable)
             self.assertEqual(str(java.parent.parent.resolve()), str(home))
-            runner.assert_called_once_with([str(java), "-version"], cwd=java.parent, timeout_seconds=20)
+            runner.assert_called_once_with(
+                [str(resolved_java), "-version"], cwd=resolved_java.parent, timeout_seconds=20
+            )
 
     def test_maven_fixture_commands_have_a_long_but_finite_deadline(self):
         """矩阵 Maven 单项允许依赖下载和编译，但每次调用都有有限上限。"""

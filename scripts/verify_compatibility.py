@@ -82,6 +82,16 @@ def resolve_java(value: str, major: int) -> tuple[str, Path]:
     return str(executable.resolve()), home
 
 
+def write_maven_pom(tree: ET.ElementTree, path: Path) -> None:
+    """写回时为 POM 根注册默认命名空间，避免 ElementTree 的 ns0 前缀让 Maven 误读模型。"""
+    root_tag = tree.getroot().tag
+    if isinstance(root_tag, str) and root_tag.startswith("{"):
+        namespace = root_tag[1:].partition("}")[0]
+        ET.register_namespace("", namespace)
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+
+
 def pin_parent_version(pom: Path, parent_artifact: str, version: str) -> Path:
     """只改临时 POM 中指定 parent 的版本，保留仓库 fixture 原文件与工作区状态。"""
     tree = safe_parse_xml(pom)
@@ -98,7 +108,7 @@ def pin_parent_version(pom: Path, parent_artifact: str, version: str) -> Path:
     with tempfile.NamedTemporaryFile(prefix=".compatibility-", suffix=".xml", dir=pom.parent, delete=False) as stream:
         generated = Path(stream.name)
     try:
-        tree.write(generated, encoding="utf-8", xml_declaration=True)
+        write_maven_pom(tree, generated)
     except Exception:
         generated.unlink(missing_ok=True)
         raise
@@ -127,7 +137,7 @@ def configure_boot_loader(pom: Path, implementation: str) -> None:
     if loader is None:
         loader = ET.SubElement(configuration, qname("loaderImplementation"))
     loader.text = implementation
-    tree.write(pom, encoding="utf-8", xml_declaration=True)
+    write_maven_pom(tree, pom)
 
 
 def run_maven(command: str, args: Sequence[str], root: Path, java_home: Path) -> None:

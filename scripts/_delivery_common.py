@@ -72,8 +72,34 @@ class CommandTimeoutError(RuntimeError):
         self.output = output
 
 
+def _signal_process_group(process: subprocess.Popen[str], signum: int, deadline: float) -> bool:
+    """先回收直属僵尸；Darwin 的僵尸组可能暂报 EPERM，但持续权限错误不能当成退出。"""
+    while True:
+        process.poll()
+        try:
+            os.killpg(process.pid, signum)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            if process.poll() is None:
+                raise
+            # 根进程可能恰在 poll 与 killpg 之间退出；回收后立即重查，不能据根退出推断整组退出。
+            try:
+                os.killpg(process.pid, signum)
+                return True
+            except ProcessLookupError:
+                return False
+            except PermissionError:
+                # 非直属僵尸由系统回收；只在同一清理期限内等待，真正权限拒绝最终仍显式失败。
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise
+                time.sleep(min(0.05, remaining))
+
+
 def stop_process_tree(process: subprocess.Popen[str]) -> None:
-    """仅终止本次启动的进程组或 Windows 子树，不按映像名扫描系统进程。"""
+    """仅清理本次进程组；回收根进程后仍检查后代，共用有界宽限且不掩盖权限失败。"""
     if os.name == "nt":
         system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
         taskkill = system_root / "System32" / "taskkill.exe"
@@ -93,21 +119,14 @@ def stop_process_tree(process: subprocess.Popen[str]) -> None:
         if process.poll() is None:
             process.kill()
     else:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        for _ in range(20):
-            try:
-                os.killpg(process.pid, 0)
-            except ProcessLookupError:
-                break
-            time.sleep(0.1)
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        deadline = time.monotonic() + 2
+        if _signal_process_group(process, signal.SIGTERM, deadline):
+            while _signal_process_group(process, 0, deadline):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    _signal_process_group(process, signal.SIGKILL, deadline)
+                    break
+                time.sleep(min(0.1, remaining))
         if process.poll() is None:
             process.kill()
     try:

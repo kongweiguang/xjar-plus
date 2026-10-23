@@ -207,10 +207,10 @@ class GoFormatCheckTests(unittest.TestCase):
         return root
 
     def test_lists_only_maintained_production_go_files(self):
-        """确认 gofmt 检查范围排除测试、vendored 依赖和生成目录。"""
+        """确认 gofmt 检查范围排除测试、vendored 依赖和生成目录，并与规范化根目录一致。"""
         with tempfile.TemporaryDirectory() as directory:
             files = check_go_format.go_sources(self.make_launcher(Path(directory)))
-            self.assertEqual([Path(directory) / "cmd" / "main.go"], files)
+            self.assertEqual([(Path(directory) / "cmd" / "main.go").resolve()], files)
 
     def test_invokes_gofmt_with_argv_and_without_shell(self):
         """确认外部 gofmt 以参数数组调用且 shell=False，避免路径空格触发命令拼接。"""
