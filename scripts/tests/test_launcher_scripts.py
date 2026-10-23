@@ -70,6 +70,18 @@ class CrossBuildTests(unittest.TestCase):
 class LauncherVerificationTests(unittest.TestCase):
     """验证真实验收入口的宿主约束与超时参数默认值。"""
 
+    def _expiry_launcher(self) -> tuple[verify_launcher.LauncherProcess, Mock]:
+        """构造仍存活的状态服务进程，隔离到期监督测试与真实子进程。"""
+        process = Mock()
+        process.poll.return_value = None
+        launcher = verify_launcher.LauncherProcess(
+            process,
+            Path("/private/launcher"),
+            Path("/private/launcher.log"),
+            19527,
+        )
+        return launcher, process
+
     def test_native_target_and_target_parser(self) -> None:
         """验证目标解析只接受可运行的本机平台组合，避免误跑交叉产物。"""
         self.assertEqual(2, len(verify_launcher.parse_target("linux-amd64")))
@@ -224,6 +236,193 @@ class LauncherVerificationTests(unittest.TestCase):
         value = verify_launcher.datetime(2026, 10, 23, 12, 0, 0, 500000,
                                          tzinfo=verify_launcher.timezone(verify_launcher.timedelta(hours=8)))
         self.assertEqual("2026-10-23T04:00:00Z", verify_launcher.instant_text(value))
+
+    def test_expiry_allows_http_to_stop_before_child_and_waits_for_cleanup(self) -> None:
+        """优雅退出可先关闭业务 HTTP，但最终状态、目录清理和状态服务都必须闭环。"""
+        launcher, process = self._expiry_launcher()
+        temporary_directory = Mock()
+        temporary_directory.glob.side_effect = [[Path("private-runtime")], [], []]
+        statuses = [
+            {"available": True, "valid": False, "appRunning": True},
+            {"available": True, "valid": False, "appRunning": False},
+            {"available": True, "valid": False, "appRunning": False},
+            {"available": True, "valid": False, "appRunning": False},
+        ]
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+
+        with patch.object(verify_launcher.time, "time", side_effect=[1005.0, 1005.1, 1005.2]), \
+                patch.object(verify_launcher.time, "monotonic", side_effect=[10.0, 10.1]), \
+                patch.object(verify_launcher.time, "sleep") as sleep, \
+                patch.object(verify_launcher, "check_health") as check_health, \
+                patch.object(verify_launcher, "read_status", side_effect=statuses) as read_status, \
+                patch.object(
+                    verify_launcher, "request_fixture",
+                    side_effect=verify_launcher.urllib.error.URLError("connection refused"),
+                ) as request_fixture:
+            elapsed = verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+        self.assertAlmostEqual(5.2, elapsed)
+        self.assertEqual(4, read_status.call_count)
+        self.assertEqual(4, check_health.call_count)
+        self.assertEqual(3, temporary_directory.glob.call_count)
+        self.assertEqual(2, sleep.call_count)
+        self.assertGreaterEqual(process.poll.call_count, 3)
+        request_fixture.assert_called_once_with(8080, "/probe", timeout=0.5)
+
+    def test_expiry_fails_when_app_running_never_clears(self) -> None:
+        """HTTP 探测不再决定进程状态；appRunning 一直为 true 必须在绝对期限失败。"""
+        launcher, _ = self._expiry_launcher()
+        temporary_directory = Mock()
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+
+        with patch.object(verify_launcher.time, "time", side_effect=[1000.0, 1006.1]), \
+                patch.object(verify_launcher.time, "sleep"), \
+                patch.object(verify_launcher, "check_health"), \
+                patch.object(
+                    verify_launcher, "read_status",
+                    return_value={"available": True, "valid": False, "appRunning": True},
+                ), \
+                patch.object(verify_launcher, "request_fixture") as request_fixture:
+            with self.assertRaisesRegex(verify_launcher.VerificationError, "六秒内"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+        request_fixture.assert_not_called()
+
+    def test_expiry_fails_when_private_runtime_never_cleans(self) -> None:
+        """目录一直残留时即使状态已停止也不能宣称闭环成功。"""
+        launcher, _ = self._expiry_launcher()
+        temporary_directory = Mock()
+        temporary_directory.glob.return_value = [Path("private-runtime")]
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+        status = {"available": True, "valid": False, "appRunning": False}
+
+        with patch.object(verify_launcher.time, "time", side_effect=[1005.0, 1005.2]), \
+                patch.object(verify_launcher.time, "monotonic", side_effect=[10.0, 14.0]), \
+                patch.object(verify_launcher.time, "sleep") as sleep, \
+                patch.object(verify_launcher, "check_health"), \
+                patch.object(verify_launcher, "read_status", return_value=status) as read_status, \
+                patch.object(verify_launcher, "request_fixture") as request_fixture:
+            with self.assertRaisesRegex(verify_launcher.VerificationError, "未清理私有运行目录"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+        self.assertEqual(2, read_status.call_count)
+        sleep.assert_not_called()
+        request_fixture.assert_not_called()
+
+    def test_expiry_failure_diagnostic_limits_status_and_redacts_log(self) -> None:
+        """过早退出诊断保留时间与退出状态，但不输出未知状态字段或任意应用日志。"""
+        launcher, process = self._expiry_launcher()
+        not_after = verify_launcher.datetime.fromtimestamp(1001, verify_launcher.timezone.utc)
+        status = {
+            "available": True,
+            "valid": True,
+            "appRunning": False,
+            "serverTime": "1970-01-01T00:16:40Z",
+            "validEndDate": "1970-01-01T00:16:41Z",
+            "remainingMs": 600,
+            "privateKey": "PRIVATE-STATUS-SECRET",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "launcher.log"
+            log_path.write_text(
+                "ignored-prefix=PRIVATE-LOG-SECRET\n" * 500
+                + "2026/10/24 12:00:00 xjar-plus: license is no longer valid; stopping application\n"
+                + "xjar-plus: data-key broker failed before delivery\n"
+                + "xjar-plus: stop child after signal: token=PRIVATE-TOKEN\n"
+                + "HTTP_READY=43121\n"
+                + "private application output=PRIVATE-APP-SECRET\n",
+                encoding="utf-8",
+            )
+            launcher.log_path = log_path
+
+            with patch.object(verify_launcher.time, "time", side_effect=[1000.0, 1001.25]), \
+                    patch.object(verify_launcher, "check_health"), \
+                    patch.object(verify_launcher, "read_status", return_value=status), \
+                    patch.object(process, "wait", return_value=17) as wait:
+                with self.assertRaises(verify_launcher.VerificationError) as raised:
+                    verify_launcher.wait_for_expiry(launcher, 8080, not_after, Path(directory))
+
+        diagnostic = str(raised.exception)
+        self.assertIn("1970-01-01T00:16:41.250000Z", diagnostic)
+        self.assertIn("1970-01-01T00:16:41Z", diagnostic)
+        self.assertIn('"launcherExitCode": 17', diagnostic)
+        self.assertIn('"remainingMs": 600', diagnostic)
+        self.assertIn("license is no longer valid; stopping application", diagnostic)
+        self.assertIn("xjar-plus: stop child after signal: [详情省略]", diagnostic)
+        self.assertIn("HTTP_READY=43121", diagnostic)
+        for secret in (
+            "PRIVATE-STATUS-SECRET",
+            "PRIVATE-LOG-SECRET",
+            "PRIVATE-TOKEN",
+            "PRIVATE-APP-SECRET",
+        ):
+            self.assertNotIn(secret, diagnostic)
+        self.assertNotIn("privateKey", diagnostic)
+        wait.assert_called_once_with(timeout=0.25)
+
+    def test_expiry_rejects_http_response_after_app_running_clears(self) -> None:
+        """最终 appRunning=false 后仍能收到业务 HTTP 响应时不能宣称业务已停止。"""
+        launcher, _ = self._expiry_launcher()
+        temporary_directory = Mock()
+        temporary_directory.glob.return_value = []
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+        status = {"available": True, "valid": False, "appRunning": False}
+
+        with patch.object(verify_launcher.time, "time", side_effect=[1005.0, 1005.2]), \
+                patch.object(verify_launcher.time, "monotonic", return_value=10.0), \
+                patch.object(verify_launcher, "check_health"), \
+                patch.object(verify_launcher, "read_status", side_effect=[status, status]), \
+                patch.object(verify_launcher, "request_fixture", return_value="still serving"):
+            with self.assertRaisesRegex(verify_launcher.VerificationError, "仍可访问"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+    def test_expiry_rejects_http_error_response_as_still_reachable(self) -> None:
+        """HTTPError 表示服务已经响应，不能因其继承 URLError 而误判为端口不可达。"""
+        launcher, _ = self._expiry_launcher()
+        temporary_directory = Mock()
+        temporary_directory.glob.return_value = []
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+        status = {"available": True, "valid": False, "appRunning": False}
+        http_error = verify_launcher.urllib.error.HTTPError(
+            "http://127.0.0.1:8080/probe", 503, "Service Unavailable", None, None
+        )
+        self.addCleanup(http_error.close)
+
+        with patch.object(verify_launcher.time, "time", side_effect=[1005.0, 1005.2]), \
+                patch.object(verify_launcher.time, "monotonic", return_value=10.0), \
+                patch.object(verify_launcher, "check_health"), \
+                patch.object(verify_launcher, "read_status", side_effect=[status, status]), \
+                patch.object(verify_launcher, "request_fixture", side_effect=http_error):
+            with self.assertRaisesRegex(verify_launcher.VerificationError, "HTTP 503"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+    def test_expiry_rejects_business_exit_while_license_is_still_valid(self) -> None:
+        """业务进程不能在有效授权期间提前退出，避免把过早停机算作到期成功。"""
+        launcher, process = self._expiry_launcher()
+        temporary_directory = Mock()
+        not_after = verify_launcher.datetime.fromtimestamp(1010, verify_launcher.timezone.utc)
+
+        with patch.object(verify_launcher.time, "time", return_value=1000.0), \
+                patch.object(verify_launcher, "check_health"), \
+                patch.object(
+                    verify_launcher, "read_status",
+                    return_value={"available": True, "valid": True, "appRunning": False},
+                ), \
+                patch.object(process, "wait", return_value=0):
+            with self.assertRaisesRegex(verify_launcher.VerificationError, "仍有效"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
+
+    def test_expiry_does_not_swallow_status_service_failure(self) -> None:
+        """状态服务异常必须向外传播，不能被预期中的业务 HTTP 断开分支吞掉。"""
+        launcher, _ = self._expiry_launcher()
+        temporary_directory = Mock()
+        not_after = verify_launcher.datetime.fromtimestamp(1000, verify_launcher.timezone.utc)
+
+        with patch.object(verify_launcher.time, "time", return_value=1005.0), \
+                patch.object(verify_launcher, "check_health", side_effect=RuntimeError("health probe failed")):
+            with self.assertRaisesRegex(RuntimeError, "health probe failed"):
+                verify_launcher.wait_for_expiry(launcher, 8080, not_after, temporary_directory)
 
 
 if __name__ == "__main__":

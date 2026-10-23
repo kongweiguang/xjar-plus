@@ -32,6 +32,15 @@ STATUS_LOG_PATTERN = re.compile(
     r"license status service listening at http://127\.0\.0\.1:(\d+)/xjp/license/status"
 )
 APP_LOG_PATTERN = re.compile(r"HTTP_READY=(\d+)")
+DIAGNOSTIC_LOG_TAIL_BYTES = 4 * 1024
+DIAGNOSTIC_STATUS_FIELDS = (
+    "available",
+    "valid",
+    "appRunning",
+    "serverTime",
+    "validEndDate",
+    "remainingMs",
+)
 
 
 class VerificationError(RuntimeError):
@@ -294,6 +303,69 @@ def read_log(path: Path) -> str:
         return ""
 
 
+def read_diagnostic_log_tail(path: Path) -> str:
+    """只读取固定验收 fixture 的日志末尾并白名单化事件，避免将应用任意输出或密钥写入诊断。"""
+    try:
+        with path.open("rb") as log_file:
+            log_file.seek(0, 2)
+            size = log_file.tell()
+            offset = max(0, size - DIAGNOSTIC_LOG_TAIL_BYTES)
+            log_file.seek(offset)
+            data = log_file.read(DIAGNOSTIC_LOG_TAIL_BYTES)
+    except OSError:
+        return "（launcher 日志不可读）"
+
+    text = data.decode("utf-8", errors="replace")
+    if offset > 0:
+        text = text.partition("\n")[2]
+
+    safe_lines: list[str] = []
+    for line in text.splitlines():
+        normalized = re.sub(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} ", "", line)
+        if normalized in {
+            "xjar-plus: license is no longer valid; stopping application",
+            "xjar-plus: data-key broker failed before delivery",
+        }:
+            safe_lines.append(normalized)
+        elif normalized.startswith("xjar-plus: stop child after signal:"):
+            safe_lines.append("xjar-plus: stop child after signal: [详情省略]")
+        elif normalized.startswith("xjar-plus: stop child after data-key broker failure:"):
+            safe_lines.append("xjar-plus: stop child after data-key broker failure: [详情省略]")
+        elif normalized.startswith("xjar-plus: stop expired application:"):
+            safe_lines.append("xjar-plus: stop expired application: [详情省略]")
+        elif normalized.startswith("xjar-plus: clean private runtime directory"):
+            safe_lines.append("xjar-plus: clean private runtime directory: [详情省略]")
+        elif re.fullmatch(r"HTTP_READY=\d+", normalized):
+            safe_lines.append(normalized)
+        elif re.fullmatch(
+            r"xjar-plus: license status service listening at http://127\.0\.0\.1:\d+/xjp/license/status",
+            normalized,
+        ):
+            safe_lines.append("xjar-plus: license status service listening at loopback")
+    if not safe_lines:
+        return "（日志尾部没有白名单诊断事件）"
+    return "\n".join(safe_lines[-32:])
+
+
+def diagnostic_status_fields(status: dict[str, object]) -> dict[str, object]:
+    """按状态 API schema 输出有限字段及严格类型，禁止未知字段混入异常诊断。"""
+    result: dict[str, object] = {}
+    expected_types = {
+        "available": bool,
+        "valid": bool,
+        "appRunning": bool,
+        "serverTime": str,
+        "validEndDate": str,
+        "remainingMs": int,
+    }
+    for field in DIAGNOSTIC_STATUS_FIELDS:
+        value = status.get(field)
+        expected_type = expected_types[field]
+        if type(value) is expected_type:
+            result[field] = value
+    return result
+
+
 def terminate_owned_tree(process: subprocess.Popen[bytes]) -> None:
     """即使根进程已退出也回收其隔离进程组，复用共享的有界 TERM/KILL 策略。"""
     try:
@@ -463,7 +535,7 @@ def wait_for_expiry(
     not_after: datetime,
     temp_directory: Path,
 ) -> float:
-    """以许可证绝对截止点加五秒宽限监视真实业务停止与仍存活的状态服务。"""
+    """按绝对截止点监督业务进程；优雅退出可先关闭 HTTP，但状态与清理契约必须闭环。"""
     absolute_end = not_after.timestamp()
     hard_deadline = absolute_end + 6.0
     while time.time() <= hard_deadline:
@@ -477,23 +549,74 @@ def wait_for_expiry(
         if status["available"] is not True:
             raise VerificationError("运行中的短期许可证在截止前变为不可用")
         if status["valid"] is True and status["appRunning"] is False:
-            raise VerificationError("业务进程在许可证截止前已停止")
-        if status["valid"] is False and status["appRunning"] is True:
+            observed_epoch = time.time()
+            observed_utc = datetime.fromtimestamp(observed_epoch, timezone.utc).isoformat(
+                timespec="microseconds"
+            ).replace("+00:00", "Z")
+            not_after_text = not_after.astimezone(timezone.utc).isoformat(
+                timespec="seconds"
+            ).replace("+00:00", "Z")
             try:
-                request_fixture(app_port, "/probe", timeout=0.5)
-            except (OSError, urllib.error.URLError, TimeoutError) as error:
-                raise VerificationError("appRunning=true 时业务 fixture 已不可访问") from error
-        if not status["valid"] and not status["appRunning"]:
-            elapsed = time.time() - absolute_end
+                launcher_exit_code = launcher.process.wait(timeout=0.25)
+            except subprocess.TimeoutExpired:
+                launcher_exit_code = launcher.process.poll()
+            diagnostic = {
+                "observedUtc": observed_utc,
+                "notAfter": not_after_text,
+                "launcherExitCode": launcher_exit_code,
+                "status": diagnostic_status_fields(status),
+                "launcherLogTail": read_diagnostic_log_tail(launcher.log_path),
+            }
+            raise VerificationError(
+                "许可证仍有效时业务进程已停止；诊断="
+                + json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+            )
+        if status["valid"] is False and status["appRunning"] is False:
+            observed_at = time.time()
+            elapsed = observed_at - absolute_end
+            if elapsed < 0:
+                raise VerificationError("业务进程在许可证截止前已停止")
             if elapsed > 6.0:
                 raise VerificationError(f"业务到期停止超过截止点加 6 秒：{elapsed:.3f}s")
-            wait_until = time.monotonic() + 4.0
-            while time.monotonic() < wait_until and list(temp_directory.glob("xjar-plus-private-*")):
+
+            # appRunning 表示受管进程生命周期；退出钩子可先关闭 HTTP，所以等待清理时只核对状态服务与状态快照。
+            cleanup_deadline = time.monotonic() + 4.0
+            while list(temp_directory.glob("xjar-plus-private-*")):
+                if launcher.process.poll() is not None:
+                    raise VerificationError(
+                        f"业务停止后状态服务提前退出（exit={launcher.process.returncode}）："
+                        f"{read_log(launcher.log_path).strip()}"
+                    )
+                check_health(launcher.status_port)
+                cleanup_status = read_status(launcher.status_port)
+                if cleanup_status["available"] is not True:
+                    raise VerificationError("等待私有运行目录清理时状态服务变为不可用")
+                if cleanup_status["valid"] is not False or cleanup_status["appRunning"] is not False:
+                    raise VerificationError("私有运行目录清理期间业务状态意外恢复")
+                if time.monotonic() >= cleanup_deadline:
+                    raise VerificationError("业务进程已退出，但 Go 启动器未清理私有运行目录")
                 time.sleep(0.1)
             if list(temp_directory.glob("xjar-plus-private-*")):
                 raise VerificationError("业务进程已退出，但 Go 启动器未清理私有运行目录")
+
+            # 清理等待可能跨过状态轮询周期，因此返回成功前重新证明状态服务仍存活且业务确已停止。
+            if launcher.process.poll() is not None:
+                raise VerificationError(
+                    f"业务停止后状态服务提前退出（exit={launcher.process.returncode}）："
+                    f"{read_log(launcher.log_path).strip()}"
+                )
+            check_health(launcher.status_port)
+            final_status = read_status(launcher.status_port)
+            if final_status["available"] is not True:
+                raise VerificationError("业务停止并清理后状态服务不可用")
+            if final_status["valid"] is not False or final_status["appRunning"] is not False:
+                raise VerificationError("私有运行目录清理后业务状态不再是已停止")
             try:
                 request_fixture(app_port, "/probe", timeout=0.5)
+            except urllib.error.HTTPError as error:
+                raise VerificationError(
+                    f"status 已报告 appRunning=false，但业务 HTTP 仍响应（HTTP {error.code}）"
+                ) from error
             except (OSError, urllib.error.URLError, TimeoutError):
                 return elapsed
             raise VerificationError("status 已报告 appRunning=false，但受管业务 HTTP 仍可访问")
