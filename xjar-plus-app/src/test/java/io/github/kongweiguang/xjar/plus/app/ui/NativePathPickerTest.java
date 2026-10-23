@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.List;
@@ -195,7 +196,7 @@ class NativePathPickerTest {
     }
 
     /**
-     * 验证 PowerShell 工作区原子设置为仅所有者可访问，并在辅助程序退出后删除。
+     * ACL 必须只授权当前账户；提权 Windows 的文件所有者可能是 Administrators 组，不能混作访问授权主体。
      */
     @Test
     void privatePickerWorkspaceUsesOwnerAclAndCleansUp() throws IOException {
@@ -203,7 +204,8 @@ class NativePathPickerTest {
         final Path directory;
         try (PrivatePickerWorkspace workspace = PrivatePickerWorkspace.create()) {
             directory = workspace.directory();
-            final UserPrincipal owner = Files.getOwner(directory);
+            final UserPrincipal owner = directory.getFileSystem().getUserPrincipalLookupService()
+                    .lookupPrincipalByName(System.getProperty("user.name"));
             assertOwnerOnlyAcl(directory, owner);
             assertOwnerOnlyAcl(directory.resolve("NativeFileDialog.cs"), owner);
             assertOwnerOnlyAcl(directory.resolve("picker.ps1"), owner);
@@ -224,14 +226,14 @@ class NativePathPickerTest {
     }
 
     /**
-     * 拒绝向当前账户之外的其他主体授予访问权限的 ACL 条目。
+     * 每一项都必须是当前账户的允许规则，不因管理员文件所有权或继承关系放宽其他主体访问。
      */
     private void assertOwnerOnlyAcl(Path path, UserPrincipal owner) throws IOException {
         final AclFileAttributeView view = Files.getFileAttributeView(path, AclFileAttributeView.class);
         assertTrue(view != null);
         final List<AclEntry> entries = view.getAcl();
         assertFalse(entries.isEmpty());
-        assertTrue(entries.stream().allMatch(entry -> entry.principal().equals(owner)));
+        assertTrue(entries.stream().allMatch(entry -> entry.type() == AclEntryType.ALLOW && entry.principal().equals(owner)));
     }
 
     /**

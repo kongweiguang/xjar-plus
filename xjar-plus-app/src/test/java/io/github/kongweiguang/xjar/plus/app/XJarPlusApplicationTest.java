@@ -97,12 +97,11 @@ class XJarPlusApplicationTest {
     }
 
     /**
-     * 使用真实 JVM 检查 UTF-8 输出；比较真实工作目录以消解 macOS /var 与 /private 等路径别名。
+     * 中文字节单独验证，目录按真实路径比较，兼容 Windows 短路径及 macOS /var 与 /private 别名。
      */
     @Test
     void mainWritesUtf8WhenJvmConsoleDefaultsToGbk(@TempDir Path temporaryDirectory) throws Exception {
         final Path workingDirectory = Files.createDirectory(temporaryDirectory.resolve("包含中文的工作目录"));
-        final String expectedWorkingDirectory = workingDirectory.toRealPath().toString();
 
         final ChildOutput help = runChild(workingDirectory, temporaryDirectory, "--help");
         assertEquals(0, help.exitCode());
@@ -110,7 +109,12 @@ class XJarPlusApplicationTest {
 
         final ChildOutput doctor = runChild(workingDirectory, temporaryDirectory, "doctor");
         assertEquals(0, doctor.exitCode());
-        assertContainsUtf8(doctor.output(), "user.dir=" + expectedWorkingDirectory);
+        assertContainsUtf8(doctor.output(), workingDirectory.getFileName().toString());
+        final String reportedDirectory = new String(doctor.output(), StandardCharsets.UTF_8).lines()
+                .filter(line -> line.startsWith("user.dir="))
+                .map(line -> line.substring("user.dir=".length()))
+                .findFirst().orElseThrow(() -> new AssertionError("doctor 未报告工作目录"));
+        assertEquals(workingDirectory.toRealPath(), Path.of(reportedDirectory).toRealPath());
 
         final ChildOutput invalid = runChild(workingDirectory, temporaryDirectory, "encrypt", "--unknown-option");
         assertEquals(2, invalid.exitCode());
