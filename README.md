@@ -13,6 +13,20 @@
 
 Windows、macOS、Linux 共用同一个工具 JAR；macOS 不需要安装 PowerShell。
 
+## 使用文档
+
+第一次使用先看 [从下载到运行的使用指南](docs/usage.md)。以下是完整手册，普通用户也能直接阅读，**不需要安装 skill 才能看**：
+
+| 想做什么 | 打开这里 |
+|---|---|
+| 指定包名、多个包、排除 DTO/配置、加密业务依赖 | [筛选规则与可复制示例](.agents/skills/xjar-plus/references/commands.md#selection) |
+| CLI 所有命令、全部参数、默认值与密码输入 | [CLI 完整手册](.agents/skills/xjar-plus/references/commands.md) |
+| 在测试类 main() 编码加密、打包、签发许可证 | [Java API / SDK 手册](.agents/skills/xjar-plus/references/java-api.md) |
+| 网页每个字段、选文件、取消重试、配置导入导出 | [Web UI 手册](.agents/skills/xjar-plus/references/web-ui.md) |
+| 分发给客户、内嵌 JDK、续期升级、状态接口 | [Go 打包](.agents/skills/xjar-plus/references/commands.md#package) · [许可证](.agents/skills/xjar-plus/references/commands.md#license) · [部署运行](.agents/skills/xjar-plus/references/commands.md#launcher) |
+| 报错、不知道哪里填错了 | [常见问题](.agents/skills/xjar-plus/references/commands.md#troubleshooting) |
+| 让 AI 根据自己的项目协助操作 | [XJar Plus skill](.agents/skills/xjar-plus/SKILL.md) |
+
 ## 快速开始
 
 下载 [xjar-plus-2.0.0.jar](https://github.com/kongweiguang/xjar-plus/releases/download/v2.0.0/xjar-plus-2.0.0.jar)（[全部附件](https://github.com/kongweiguang/xjar-plus/releases/tag/v2.0.0)），或在源码根目录构建：
@@ -40,9 +54,27 @@ java -jar app-encrypted.jar
 
 按终端提示输入密码。自动化可用 `--password-file password.txt`；启动加密应用时用 `java "-Dxjar.plus.password-file=password.txt" -jar app-encrypted.jar`，不要把明文密码写进命令行。
 
+### 只加密指定包
+
+例如只保护 `com.example.order`，**匹配的是 JAR 内路径，点号要换成 `/`**。先运行 `jar tf app.jar` 查看结构，再选择对应命令。
+
+普通 JAR：
+
+```text
+java -jar xjar-plus-2.0.0.jar encrypt --input app.jar --output app-encrypted.jar --include "com/example/order/**"
+```
+
+Spring Boot / 标准嵌套布局 Solon：
+
+```text
+java -jar xjar-plus-2.0.0.jar encrypt --input app.jar --output app-encrypted.jar --include "BOOT-INF/classes/com/example/order/**" --exclude "BOOT-INF/classes/com/example/order/dto/**"
+```
+
+两个例子分别使用，不要写到同一个已存在的输出。多个包重复 `--include`；排除优先，未选中文件保留明文，不会删除。依赖默认不加密；其开关和 `依赖.jar!/包路径` 写法见 [完整筛选教程](.agents/skills/xjar-plus/references/commands.md#selection)。
+
 ### 在测试类 main() 中使用
 
-引入 SDK 中的 `io.github.kongweiguang.xjar.plus:xjar-plus-core:2.0.0`，参考可直接运行的 [EncryptMain.java](examples/EncryptMain.java)。无需修改工具内部实现；[使用指南](docs/usage.md) 包含 SDK 安装、打包、验证和续期示例。
+引入 SDK 中的 `io.github.kongweiguang.xjar.plus:xjar-plus-core:2.0.0`，参考可直接运行的 [EncryptMain.java](examples/EncryptMain.java)。无需修改工具内部实现；[Java API 手册](.agents/skills/xjar-plus/references/java-api.md) 说明 SDK 安装、Maven 依赖、所有请求参数、筛选、进度和取消。
 
 ### 打包 Go 授权启动器
 
@@ -67,7 +99,7 @@ macOS 目标选择 `darwin-arm64`（Apple Silicon）或 `darwin-amd64`（Intel�
 
 ## 文档与开发
 
-- [使用指南](docs/usage.md)：环境诊断、CLI/API/UI、许可证、故障与迁移。
+- [使用指南](docs/usage.md)：下载、首次操作顺序、三种入口及完整手册导航。
 - [架构说明](docs/architecture.md) · [加密格式](docs/format-v2.md) · [可安装 Skill](.agents/skills/xjar-plus/SKILL.md)。
 - `xjar-plus-*`：五个 Java 模块；`launcher/`：Go 启动器；`examples/`：Java 示例。
 - `integration-tests/`：框架与跨语言验证；`scripts/`：统一的 Python 检查、验收和发布脚本。

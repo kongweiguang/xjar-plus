@@ -5,6 +5,8 @@
 这些代码既可放进自己的 `src/test/java` 后从 IDE 运行，也可用 Java 21 源文件模式运行。
 不需要在 XJar Plus 的内部实现中改路径或密码。先准备一个只允许当前用户读取的 UTF-8 密码文件。
 
+完整的安装、参数、筛选与进度取消说明见 [Java API 手册](https://github.com/kongweiguang/xjar-plus/blob/master/.agents/skills/xjar-plus/references/java-api.md)。只加密指定包时，先阅读 [归档路径与 glob 示例](https://github.com/kongweiguang/xjar-plus/blob/master/.agents/skills/xjar-plus/references/commands.md#selection)：普通包用 `com/example/**`，Spring Boot / 标准嵌套 Solon 用 `BOOT-INF/classes/com/example/**`，通过 `EncryptionRequest.Builder.include(...)` / `.exclude(...)` 逐条设置。
+
 下载或构建 `xjar-plus-2.0.0.jar` 后，在包含该 JAR 和 `examples` 目录的位置执行：
 
 ```text

@@ -2,9 +2,19 @@
 
 # XJar Plus 2.0 使用指南
 
-本文面向把 XJar Plus 接入项目的开发者。示例路径和应用名均为占位值；运行前先替换，并先对可恢复的测试 JAR 验证。Windows 11
-amd64 的 24 项真实归档兼容测试已通过，固定框架版本、候选哈希和平台边界以 [
-`compatibility-matrix.json`](compatibility-matrix.json) 为准；本地验证不代表 GitHub 发布已完成。
+本文面向第一次使用及接入项目的开发者。示例路径、包名和应用名请替换为自己的值，先在可恢复的测试 JAR 上操作。完整教程由仓库和 skill 共用，可直接点击阅读，不需要先安装 skill。
+
+| 需要什么 | 完整说明 |
+|---|---|
+| 只加密指定包、类、多个包、资源或依赖 | [路径与 glob 筛选教程](../.agents/skills/xjar-plus/references/commands.md#selection) |
+| 所有 CLI 命令和参数的必填项、默认值、密码输入 | [CLI 完整手册](../.agents/skills/xjar-plus/references/commands.md) |
+| SDK 安装、测试 main()、全部请求参数、进度取消 | [Java API 手册](../.agents/skills/xjar-plus/references/java-api.md) |
+| 网页所有字段、文件选择、导入导出、取消和刷新恢复 | [Web UI 手册](../.agents/skills/xjar-plus/references/web-ui.md) |
+| Go 客户端分发、内嵌 JDK、运行参数 | [打包与部署](../.agents/skills/xjar-plus/references/commands.md#package) |
+| 签发、续期、升级应用、状态端口和接口 | [许可证](../.agents/skills/xjar-plus/references/commands.md#license) · [运行与状态](../.agents/skills/xjar-plus/references/commands.md#launcher) |
+| 命令失败、不知道哪里填错 | [故障对照表](../.agents/skills/xjar-plus/references/commands.md#troubleshooting) |
+
+第一次操作的顺序：准备原始可执行 JAR 并验证原包 → 选择下面的入口/产物模式 → `doctor` 检查环境 → 准备私有 UTF-8 密码文件 → 加密或打包到新输出 → 验证并实际启动。只有 Go 模式第一次还需要 `license init` 创建发行凭据，后续复用。
 
 ## 1. 选择入口和产物
 
@@ -20,7 +30,9 @@ JDK，也可在目标机上查找 Java。目标机运行 Go 启动器不需要 G
 工具 JAR 需要 Java 21。被保护应用的 Java 下限取决于其字节码与所选归档运行时；这不等于工具使用的 Java 版本。普通 JAR 已在
 Java 8/11/17/21/25 实测；框架各使用矩阵指定的 JDK，不外推为所有 JDK 与框架版本组合都已验证。
 
-## 2. 构建工具
+## 2. 下载或构建工具
+
+只使用工具时，下载 [xjar-plus-2.0.0.jar](https://github.com/kongweiguang/xjar-plus/releases/download/v2.0.0/xjar-plus-2.0.0.jar)，安装 Java 21 即可，不需要 Maven、Python 或 PowerShell。下文使用源码构建路径；下载用户把命令里的 `xjar-plus-app/target/xjar-plus-2.0.0.jar` 换成自己的工具路径，例如 `xjar-plus-2.0.0.jar`。
 
 构建机需要 JDK 21 和 Maven。只有生成 Go 启动器时才需要可用的 Go 工具链；是否需要网络访问取决于 Go module
 依赖是否已缓存。先从仓库根目录构建：
@@ -67,6 +79,8 @@ trim 或做 Unicode 归一化。不要把密码放进 shell 历史、CI 日志�
 Windows 上部分 JDK 的 `java.exe` 会先用系统代码页转换启动参数；英文系统可能在进入 Java 代码前把中文或 emoji 变为 `?`（见 [OpenJDK 21 启动器实现](https://github.com/openjdk/jdk21u/blob/jdk-21.0.12%2B8/src/java.base/share/native/launcher/main.c)）。`-Dfile.encoding=UTF-8` 或修改终端显示编码不能修复这一步。构建时优先用 Web UI / Java API 处理非 ASCII 路径，密码使用 UTF-8 文件；目标应用的复杂文本优先放入其支持的 UTF-8 配置文件，而不是启动参数。Go 启动器最终也调用目标 Java，不绕过该 JDK 限制。请在实际目标系统验证所需字符，不要仅以终端显示正常判断传参正确。
 
 ### 3.1 独立加密、验证、查看和恢复
+
+**指定包名不是写 `com.example`。** 先 `jar tf app.jar` 看内部路径；普通 JAR 用 `--include "com/example/**"`，Spring Boot 和本仓库验证的 Solon 标准嵌套布局用 `--include "BOOT-INF/classes/com/example/**"`。多条 include 重复传入，exclude 优先，未选中文件保留明文。完整示例与依赖路径见 [指定包名、类和资源](../.agents/skills/xjar-plus/references/commands.md#selection)；全部参数表见 [CLI 参数参考](../.agents/skills/xjar-plus/references/commands.md#reference)。
 
 以下命令不依赖特定 shell；路径带空格时用双引号包围完整参数。
 
@@ -140,6 +154,8 @@ java -jar xjar-plus-app/target/xjar-plus-2.0.0.jar license issue --issuer-file p
 
 ## 4. Java API：在测试类 `main()` 中操作
 
+本节提供最小入口；全部公开 API、Builder 参数/默认值、包名筛选、打包、进度与取消见 [Java API 完整手册](../.agents/skills/xjar-plus/references/java-api.md)。
+
 将 `xjar-plus-core` 加入 Maven 项目（其余核心模块由 Maven 依赖带入）。当前仓库不自动发布 Maven Central；从源码 `mvn install`
 ，或在 SDK 解压目录执行 `python install_sdk.py`（macOS/Linux 通常用 `python3 install_sdk.py`），安装库、POM 和源码 JAR 到本机 Maven 仓库。依赖坐标：
 
@@ -192,8 +208,10 @@ public final class EncryptMain {
 
 ## 5. 本地 Web UI
 
+逐个字段的用途、实际默认值及网页填写包名的示例见 [Web UI 完整手册](../.agents/skills/xjar-plus/references/web-ui.md)。CLI 的规则要引用，网页的规则文本框每行一条，**不要写引号或 `--include`**。
+
 只有显式执行 `ui` 才会启动 UI。默认监听本机回环的系统分配端口，并在桌面环境可用时打开浏览器；`--port 0..65535` 可选择监听端口，
-`--no-browser` 只打印地址：
+`--no-browser` 不自动打开浏览器，打印地址后服务仍在前台运行：
 
 ```text
 java -jar xjar-plus-app/target/xjar-plus-2.0.0.jar ui
@@ -223,14 +241,38 @@ JSON 解析产生的不可变字符串不能保证从进程堆内存中物理擦
 
 ### 使用 Skill 辅助操作
 
-仓库已提供 `.agents/skills/xjar-plus/SKILL.md`。下载 Skill ZIP 后，将其中的 `xjar-plus` 文件夹放到使用项目的
+仓库已提供 `.agents/skills/xjar-plus/SKILL.md`。下载 [2.0.0 发行快照的 Skill ZIP](https://github.com/kongweiguang/xjar-plus/releases/download/v2.0.0/xjar-plus-2.0.0-skill.zip) 后，将其中的 `xjar-plus` 文件夹放到使用项目的
 `.agents/skills/`，或用户目录下的 `.agents/skills/`，即可按 Codex
 的[官方本地技能发现规则](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)使用。无需修改全局设置或安装额外插件。
 
 示例请求：`使用 $xjar-plus，检查我的 Java 环境，把指定原始 JAR 加密到一个新文件并验证启动。` Skill 会帮助选择独立 JAR 或 Go
 授权模式、核对环境和执行验证；它不会自动发布产物，也不应要求你在聊天里粘贴密码或发行密钥。
 
+也可以明确描述范围，例如：
+
+```text
+使用 $xjar-plus，把 build/app.jar 加密为 dist/app-encrypted.jar。只保护 com.example.order 和 com.example.payment，排除 order.dto。先确认这是 Boot 还是普通布局；密码使用我本地的 private/password.txt，不要读取后回显。
+```
+
+```text
+使用 $xjar-plus，用 Java 测试类 main() 调用 API，生成 macOS Apple Silicon 的 Go 启动器；复用 private/demo.issuer，appId 为 demo，到期时间为 2027-10-24T00:00:00Z，给出打包和运行验证步骤。
+```
+
+仓库 `.agents/skills/xjar-plus/` 及其 `references/` 是本次文档更新的完整内容。已有 `v2.0.0` Release 的 Skill ZIP 固定在发布时版本；希望使用这次补全的教程，可[下载当前源码 ZIP](https://github.com/kongweiguang/xjar-plus/archive/refs/heads/master.zip)，解压后复制其中的 `.agents/skills/xjar-plus/` 到自己项目的同一相对位置，不需要构建源码。保留完整目录，不要只复制 `SKILL.md` 丢掉参考文件：
+
+```text
+你的项目/
+└── .agents/skills/xjar-plus/
+    ├── SKILL.md
+    └── references/
+        ├── commands.md
+        ├── java-api.md
+        └── web-ui.md
+```
+
 ## 6. 运行加密后的应用
+
+可复制的 JVM/业务传参、单 JVM 桥接、Go 启动器文件布局、多实例端口、续期和退出码见 [CLI 手册的运行章节](../.agents/skills/xjar-plus/references/commands.md#run-jar)及[启动器章节](../.agents/skills/xjar-plus/references/commands.md#launcher)。下面保留接入方需要的状态契约。
 
 独立加密 JAR 需要密码源，但不读取应用的 stdin。可在有终端的环境交互输入隐藏密码，或明确指定私有密码文件：
 
