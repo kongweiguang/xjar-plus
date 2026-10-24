@@ -241,7 +241,7 @@ JSON 解析产生的不可变字符串不能保证从进程堆内存中物理擦
 
 ### 使用 Skill 辅助操作
 
-仓库已提供 `.agents/skills/xjar-plus/SKILL.md`。下载 [2.0.0 发行快照的 Skill ZIP](https://github.com/kongweiguang/xjar-plus/releases/download/v2.0.0/xjar-plus-2.0.0-skill.zip) 后，将其中的 `xjar-plus` 文件夹放到使用项目的
+仓库已提供 `.agents/skills/xjar-plus/SKILL.md`。下载 [2.0.0 的完整 Skill ZIP](https://github.com/kongweiguang/xjar-plus/releases/download/v2.0.0/xjar-plus-2.0.0-skill.zip) 后，将其中的 `xjar-plus` 文件夹放到使用项目的
 `.agents/skills/`，或用户目录下的 `.agents/skills/`，即可按 Codex
 的[官方本地技能发现规则](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)使用。无需修改全局设置或安装额外插件。
 
@@ -258,7 +258,7 @@ JSON 解析产生的不可变字符串不能保证从进程堆内存中物理擦
 使用 $xjar-plus，用 Java 测试类 main() 调用 API，生成 macOS Apple Silicon 的 Go 启动器；复用 private/demo.issuer，appId 为 demo，到期时间为 2027-10-24T00:00:00Z，给出打包和运行验证步骤。
 ```
 
-仓库 `.agents/skills/xjar-plus/` 及其 `references/` 是本次文档更新的完整内容。已有 `v2.0.0` Release 的 Skill ZIP 固定在发布时版本；希望使用这次补全的教程，可[下载当前源码 ZIP](https://github.com/kongweiguang/xjar-plus/archive/refs/heads/master.zip)，解压后复制其中的 `.agents/skills/xjar-plus/` 到自己项目的同一相对位置，不需要构建源码。保留完整目录，不要只复制 `SKILL.md` 丢掉参考文件：
+`v2.0.0` Release 的 Skill ZIP 已同步补全后的 CLI、Java API、Web UI 教程，下载链接不变；本次文档修订的来源提交与 CI 见 Release 说明，SHA-256 以同页最新 `SHA256SUMS` 为准。也可[下载当前源码 ZIP](https://github.com/kongweiguang/xjar-plus/archive/refs/heads/master.zip)，解压后复制 `.agents/skills/xjar-plus/` 到自己项目的同一相对位置，不需要构建源码。保留完整目录，不要只复制 `SKILL.md` 丢掉参考文件：
 
 ```text
 你的项目/
